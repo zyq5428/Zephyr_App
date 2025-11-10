@@ -1,0 +1,36 @@
+/* pandora_stm32l475.overlay */
+
+/ {
+	pwmleds: pwmleds {
+		compatible = "pwm-leds";
+		status = "okay";
+
+		green_pwm_led: green_pwm_led {
+			pwms = <&pwm4 1 PWM_MSEC(20) PWM_POLARITY_NORMAL>;
+		};
+	};
+
+	aliases {
+		pwm-led0 = &green_pwm_led;
+	};
+};
+
+// TIM4 主控制器节点
+&timers4 {
+    status = "okay";
+
+    st,prescaler = <1600>;
+
+	pwm4: pwm {
+		status = "okay";
+		pinctrl-0 = <&tim4_ch3_pb8>;
+		pinctrl-names = "default";
+	};
+};
+
+&pinctrl {
+    tim4_ch3_pb8: tim4_ch3_pb8 {
+        // STM32 L475 Pinmux：Port B 对应数字 1，AF2
+        pinmux = <STM32_PINMUX('B', 8, AF2)>;
+    };
+};
