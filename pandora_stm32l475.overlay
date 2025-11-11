@@ -12,6 +12,7 @@
 
 	aliases {
 		pwm-led0 = &green_pwm_led;
+		led1 = &green_led;
 	};
 };
 
