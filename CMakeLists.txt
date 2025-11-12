@@ -14,6 +14,7 @@ target_include_directories(app PRIVATE
 target_sources(app PRIVATE
     src/main.c
     src/led_thread.c
+    src/ap3216c_thread.c
 )
 
 # 3. (可选) 链接所需的 Zephyr 库
