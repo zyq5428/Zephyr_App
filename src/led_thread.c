@@ -3,6 +3,9 @@
 #include <zephyr/logging/log.h> // 建议添加日志头文件，尽管这里只用 printk
 #include "led_thread.h"
 
+// 启用日志记录
+LOG_MODULE_REGISTER(LED_TASK, LOG_LEVEL_INF);
+
 // 线程栈和定义
 #define LED_STACK_SIZE 512
 K_THREAD_STACK_DEFINE(led_stack_area, LED_STACK_SIZE);
@@ -24,21 +27,21 @@ static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED1_NODE, gpios);
 void led_thread_entry(void *p1, void *p2, void *p3)
 {
     // ... 在这里初始化您的 LED 设备 ...
-    printk("LED Thread started\n");
+    LOG_INF("LED Thread started");
 
     int ret;
 	bool led_state = true;
 
 	if (!gpio_is_ready_dt(&led)) {
         // **<<<<<<<< 修改点 2a：处理错误并避免返回 >>>>>>>>**
-		printk("Error: LED device not ready\n");
+		LOG_ERR("Error: LED device not ready");
         while(1) { k_msleep(SLEEP_TIME_MS); } // 避免返回，进入无限休眠
 	}
 
 	ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
 	if (ret < 0) {
         // **<<<<<<<< 修改点 2b：处理错误并避免返回 >>>>>>>>**
-		printk("Error: Failed to configure LED pin (ret=%d)\n", ret);
+		LOG_ERR("Error: Failed to configure LED pin (ret=%d)", ret);
         while(1) { k_msleep(SLEEP_TIME_MS); } // 避免返回，进入无限休眠
 	}
 
@@ -46,12 +49,12 @@ void led_thread_entry(void *p1, void *p2, void *p3)
 		ret = gpio_pin_toggle_dt(&led);
 		if (ret < 0) {
             // **<<<<<<<< 修改点 2c：处理错误并避免返回 >>>>>>>>**
-            printk("Error: Failed to toggle LED pin (ret=%d)\n", ret);
+            LOG_ERR("Error: Failed to toggle LED pin (ret=%d)", ret);
             while(1) { k_msleep(SLEEP_TIME_MS); } // 避免返回，进入无限休眠
 		}
 
 		led_state = !led_state;
-		printk("LED state: %s\n", led_state ? "ON" : "OFF");
+		LOG_DBG("LED state: %s", led_state ? "ON" : "OFF");
 		k_msleep(SLEEP_TIME_MS);
     }
 }

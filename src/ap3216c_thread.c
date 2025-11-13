@@ -22,26 +22,36 @@ static const struct i2c_dt_spec ap3216c_i2c_spec = I2C_DT_SPEC_GET(DT_ALIAS(ap32
 
 /**
  * @brief 初始化 AP3216C 传感器
- * * 将传感器设置为 ALS/PS 模式 (例如：写入 0x04 到 0x00 寄存器)
+ * * 1. 执行软件复位
+ * * 2. 将传感器设置为 ALS/PS 模式 (例如：写入 0x07 到 0x00 寄存器)
  */
 static int ap3216c_init(void)
 {
     int ret;
-    // 写入配置：寄存器地址 (0x00) + 配置值 (0x04)
-    uint8_t tx_buf[] = {AP3216C_SYS_CONFIGURATION_REG, AP3216C_MODE_SW_RESET};
+    uint8_t tx_buf_reset[] = {AP3216C_SYS_CONFIGURATION_REG, AP3216C_MODE_SW_RESET};
+    uint8_t tx_buf_mode[] = {AP3216C_SYS_CONFIGURATION_REG, AP3216C_MODE_ALS_AND_PS}; // <-- 更改为工作模式
 
     if (!device_is_ready(ap3216c_i2c_spec.bus)) {
         LOG_ERR("I2C bus (%s) not ready.", ap3216c_i2c_spec.bus->name);
         return -ENODEV;
     }
 
-    ret = i2c_write_dt(&ap3216c_i2c_spec, tx_buf, sizeof(tx_buf));
+    // 步骤 1: 执行软件复位 (可选，但推荐)
+    ret = i2c_write_dt(&ap3216c_i2c_spec, tx_buf_reset, sizeof(tx_buf_reset));
+    if (ret != 0) {
+        LOG_ERR("Failed to reset AP3216C (Addr: 0x%x): %d", ap3216c_i2c_spec.addr, ret);
+        return ret;
+    }
+    // 复位后需要短暂延时 (根据数据手册，但通常在 I2C 速度下可能不需要显式 k_msleep)
+
+    // 步骤 2: 切换到 ALS 和 PS 工作模式
+    ret = i2c_write_dt(&ap3216c_i2c_spec, tx_buf_mode, sizeof(tx_buf_mode));
 
     if (ret != 0) {
-        LOG_ERR("Failed to init AP3216C (Addr: 0x%x): %d",
+        LOG_ERR("Failed to set mode AP3216C (Addr: 0x%x): %d",
                 ap3216c_i2c_spec.addr, ret);
     } else {
-        LOG_INF("AP3216C initialized successfully.");
+        LOG_INF("AP3216C initialized and set to ALS/PS mode successfully.");
     }
 
     return ret;
