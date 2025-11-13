@@ -7,6 +7,7 @@
 #define AP3216C_THREAD_H
 
 #include <zephyr/types.h>
+#include "ap3216c.h"
 
 /**
  * @brief 启动 AP3216C 传感器读取线程

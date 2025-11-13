@@ -17,11 +17,6 @@ LOG_MODULE_REGISTER(AP3216C_TASK, LOG_LEVEL_INF);
 // 别名 ap3216c-i2c 必须在 dts.overlay 中定义
 static const struct i2c_dt_spec ap3216c_i2c_spec = I2C_DT_SPEC_GET(DT_ALIAS(ap3216c_i2c));
 
-// AP3216C 寄存器地址定义 (请根据手册核对)
-#define AP3216C_SYSTEM_MODE_REG 0x00 // 系统模式配置寄存器
-#define AP3216C_ALS_DATA_LOW    0x0C // ALS环境光数据低字节寄存器
-#define AP3216C_ALS_DATA_HIGH   0x0D // ALS环境光数据高字节寄存器
-#define AP3216C_PS_DATA_LOW     0x0E // 接近传感器数据低字节寄存器
 
 /* --- 辅助函数 --- */
 
@@ -33,7 +28,7 @@ static int ap3216c_init(void)
 {
     int ret;
     // 写入配置：寄存器地址 (0x00) + 配置值 (0x04)
-    uint8_t tx_buf[] = {AP3216C_SYSTEM_MODE_REG, 0x04};
+    uint8_t tx_buf[] = {AP3216C_SYS_CONFIGURATION_REG, AP3216C_MODE_SW_RESET};
 
     if (!device_is_ready(ap3216c_i2c_spec.bus)) {
         LOG_ERR("I2C bus (%s) not ready.", ap3216c_i2c_spec.bus->name);
@@ -59,11 +54,11 @@ static int read_ap3216c_als_data(uint16_t *als_data)
 {
     int ret;
     uint8_t als_buffer[2];
-    uint8_t als_reg_addr = AP3216C_ALS_DATA_LOW;
+    uint8_t als_reg_addr = AP3216C_ALS_DATA_L_REG;
 
     // 执行 I2C 写-读操作：写入寄存器地址 0x0C，然后读取 2 字节数据
-    ret = i2c_write_read_dt(&ap3216c_i2c_spec, 
-                            &als_reg_addr, 1, 
+    ret = i2c_write_read_dt(&ap3216c_i2c_spec,
+                            &als_reg_addr, 1,
                             als_buffer, 2);
 
     if (ret != 0) {
