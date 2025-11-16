@@ -31,6 +31,7 @@ Get-ChildItem -Path .\dts\bindings\sensor -Recurse -Include *.yaml | Select-Stri
 ```
 west build -p always -b stm32f429i_disc1 samples\basic\blinky
 west build -p auto -b pandora_stm32l475 ..\application
+west build -b pandora_stm32l475 -t menuconfig
 ```
 
 ## overlay设置

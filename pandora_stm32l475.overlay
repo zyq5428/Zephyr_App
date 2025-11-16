@@ -15,6 +15,29 @@
 		led1 = &green_led;
 		ap3216c-i2c = &ap3216c;
 	};
+
+	leds {
+		compatible = "gpio-leds";
+        // <&gpioe 7 GPIO_ACTIVE_HIGH> 这一行可能需要调整
+        // 但是对于 led 节点，这是一个标志，表示该引脚是低电平有效的。
+        
+        // 根据您的电路，低电平点亮，所以它是 GPIO_ACTIVE_LOW
+        // 这将影响驱动程序对 "开/关" 的解释。
+
+        // 步骤 1: 修正引脚极性 (这是最标准的做法)
+
+		red_led: led_0 {
+			gpios = <&gpioe 7 GPIO_ACTIVE_LOW>;
+		};
+
+		green_led: led_1 {
+			gpios = <&gpioe 8 GPIO_ACTIVE_LOW>;
+		};
+
+		blue_led: led_2 {
+			gpios = <&gpioe 9 GPIO_ACTIVE_LOW>;
+		};
+	};
 };
 
 &i2c3 {
