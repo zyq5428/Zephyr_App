@@ -7,7 +7,6 @@
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/logging/log.h>
 
-// 包含我们自己的头文件
 #include "ap3216c_thread.h"
 
 // 启用日志记录

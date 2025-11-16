@@ -8,6 +8,7 @@ project(application)
 # PRIVATE 表示这个 include 路径只对当前 app target 有效
 target_include_directories(app PRIVATE
     include
+    peripherals/include
 )
 
 # 2. 添加所有源文件到应用程序目标
@@ -15,6 +16,7 @@ target_sources(app PRIVATE
     src/main.c
     src/led_thread.c
     src/ap3216c_thread.c
+    peripherals/ap3216c.c
 )
 
 # 3. (可选) 链接所需的 Zephyr 库
