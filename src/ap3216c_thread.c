@@ -6,7 +6,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/logging/log.h>
-
+#include <errno.h> // 引入标准错误码
 #include "ap3216c_thread.h"
 
 // 启用日志记录
@@ -16,68 +16,46 @@ LOG_MODULE_REGISTER(AP3216C_TASK, LOG_LEVEL_INF);
 // 别名 ap3216c-i2c 必须在 dts.overlay 中定义
 static const struct i2c_dt_spec ap3216c_i2c_spec = I2C_DT_SPEC_GET(DT_ALIAS(ap3216c_i2c));
 
-
-/* --- 辅助函数 --- */
-
 /**
  * @brief 初始化 AP3216C 传感器
- * * 1. 执行软件复位
- * * 2. 将传感器设置为 ALS/PS 模式 (例如：写入 0x07 到 0x00 寄存器)
  */
 static int ap3216c_init(void)
 {
     int ret;
-    uint8_t tx_buf_reset[] = {AP3216C_SYS_CONFIGURATION_REG, AP3216C_MODE_SW_RESET};
-    uint8_t tx_buf_mode[] = {AP3216C_SYS_CONFIGURATION_REG, AP3216C_MODE_ALS_AND_PS}; // <-- 更改为工作模式
-
-    if (!device_is_ready(ap3216c_i2c_spec.bus)) {
-        LOG_ERR("I2C bus (%s) not ready.", ap3216c_i2c_spec.bus->name);
-        return -ENODEV;
-    }
-
-    // 步骤 1: 执行软件复位 (可选，但推荐)
-    ret = i2c_write_dt(&ap3216c_i2c_spec, tx_buf_reset, sizeof(tx_buf_reset));
+    
+    // 1. 复位传感器
+    ret = ap3216c_reset_sensor(&ap3216c_i2c_spec);
     if (ret != 0) {
-        LOG_ERR("Failed to reset AP3216C (Addr: 0x%x): %d", ap3216c_i2c_spec.addr, ret);
+        LOG_ERR("Failed to reset AP3216C: %d", ret);
         return ret;
     }
-    // 复位后需要短暂延时 (根据数据手册，但通常在 I2C 速度下可能不需要显式 k_msleep)
-
-    // 步骤 2: 切换到 ALS 和 PS 工作模式
-    ret = i2c_write_dt(&ap3216c_i2c_spec, tx_buf_mode, sizeof(tx_buf_mode));
-
+    
+    // 2. 切换到 ALS 和 PS 工作模式
+    // 注意：这里使用 ap3216c_set_mode 替换了 ap3216c_init_mode
+    ret = ap3216c_set_mode(&ap3216c_i2c_spec, AP3216C_MODE_ALS_AND_PS);
     if (ret != 0) {
-        LOG_ERR("Failed to set mode AP3216C (Addr: 0x%x): %d",
-                ap3216c_i2c_spec.addr, ret);
+        LOG_ERR("Failed to set mode AP3216C: %d", ret);
     } else {
         LOG_INF("AP3216C initialized and set to ALS/PS mode successfully.");
     }
+
+    // 3. (可选) 设置 ALS 增益为 AP3216C_ALS_GAIN1 (1x 增益，最大量程)
+    ret = ap3216c_set_param(&ap3216c_i2c_spec, AP3216C_ALS_RANGE, AP3216C_ALS_RANGE_20661);
+    if (ret != 0) {
+        LOG_WRN("Failed to set ALS Gain: %d", ret);
+    }
+
 
     return ret;
 }
 
 /**
- * @brief 从 AP3216C 读取 ALS（环境光）数据
+ * @brief 从 AP3216C 读取 ALS（环境光）
  */
 static int read_ap3216c_als_data(uint16_t *als_data)
 {
-    int ret;
-    uint8_t als_buffer[2];
-    uint8_t als_reg_addr = AP3216C_ALS_DATA_L_REG;
-
-    // 执行 I2C 写-读操作：写入寄存器地址 0x0C，然后读取 2 字节数据
-    ret = i2c_write_read_dt(&ap3216c_i2c_spec,
-                            &als_reg_addr, 1,
-                            als_buffer, 2);
-
-    if (ret != 0) {
-        return ret;
-    }
-
-    // 组合数据：假设 als_buffer[0] 是低字节 (0x0C)，als_buffer[1] 是高字节 (0x0D)
-    *als_data = (uint16_t)(als_buffer[1] << 8) | als_buffer[0];
-
-    return 0;
+    // 调用新的驱动读取函数
+    return ap3216c_read_als_raw(&ap3216c_i2c_spec, als_data);
 }
 
 
@@ -91,7 +69,7 @@ void ap3216c_thread_entry(void *p1, void *p2, void *p3)
 
     LOG_INF("AP3216C Thread started. I2C Bus: %s", ap3216c_i2c_spec.bus->name);
 
-    // 1. 检查设备是否就绪
+    // 1. 检查 I2C 设备是否就绪
     if (!device_is_ready(ap3216c_i2c_spec.bus)) {
         LOG_ERR("I2C Bus is not ready. Aborting thread.");
         return;
@@ -100,7 +78,7 @@ void ap3216c_thread_entry(void *p1, void *p2, void *p3)
     // 2. 初始化传感器
     ret = ap3216c_init();
     if (ret != 0) {
-        LOG_ERR("Sensor initialization failed. Aborting thread.");
+        LOG_ERR("Sensor initialization failed. Aborting thread. Error: %d", ret);
         return;
     }
 
@@ -112,7 +90,7 @@ void ap3216c_thread_entry(void *p1, void *p2, void *p3)
         ret = read_ap3216c_als_data(&als_value);
 
         if (ret == 0) {
-            LOG_INF("ALS Data: %u lux (Raw)", als_value);
+            LOG_INF("ALS Data: %u raw", als_value);
         } else {
             LOG_WRN("Failed to read ALS data: %d", ret);
         }
