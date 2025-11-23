@@ -1,0 +1,98 @@
+{
+	// ========== tasks.json 内容 ==========
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "West Build (pandora) with VENV",
+			"type": "shell",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"options": {
+				"shell": {
+					"executable": "powershell.exe",
+					"args": [
+						"-NoProfile",
+						"-ExecutionPolicy",
+						"Bypass",
+						"-Command"
+					]
+				}
+			},
+			"command": "E:/zephyrproject/.venv/Scripts/activate.ps1 ; E:/zephyrproject/.venv/Scripts/west.exe build -p auto -b pandora_stm32l475 application",
+			"problemMatcher": [
+				"$gcc"
+			]
+		},
+		{
+			"label": "West Configurable Build with VENV",
+			"type": "shell",
+			"group": {
+				"kind": "build"
+			},
+			"options": {
+				"shell": {
+					"executable": "powershell.exe",
+					"args": [
+						"-NoProfile",
+						"-ExecutionPolicy",
+						"Bypass",
+						"-Command"
+					]
+				}
+			},
+			"command": "E:/zephyrproject/.venv/Scripts/activate.ps1 ; E:/zephyrproject/.venv/Scripts/west.exe build -p ${input:pristine} -b ${input:board} application",
+			"problemMatcher": [
+				"$gcc"
+			]
+		},
+		{
+			"label": "West Flash (pandora) with VENV",
+			"type": "shell",
+			"options": {
+				"shell": {
+					"executable": "powershell.exe",
+					"args": [
+						"-NoProfile",
+						"-ExecutionPolicy",
+						"Bypass",
+						"-Command"
+					]
+				}
+			},
+			"command": "E:/zephyrproject/.venv/Scripts/activate.ps1 ; E:/zephyrproject/.venv/Scripts/west.exe flash -d ${workspaceFolder}/build",
+			"problemMatcher": [
+				"$gcc"
+			]
+		},
+		{
+			"label": "Launch OpenOCD Server Only",
+			"type": "shell",
+			"command": "E:/openocd/bin/openocd.exe -s E:/openocd/share/openocd/scripts -f interface/stlink.cfg -f target/stm32l4x.cfg", 
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"group": "none",
+			"presentation": {
+				"reveal": "always",
+				"panel": "new"
+			}
+		}
+	],
+	"inputs": [
+		{
+			"id": "board",
+			"type": "promptString",
+			"default": "pandora_stm32l475",
+			"description": "See https://docs.zephyrproject.org/latest/boards/index.html"
+		},
+		{
+			"id": "pristine",
+			"type": "pickString",
+			"description": "Choose when to run a pristine build",
+			"default": "auto",
+			"options": ["auto", "always", "never"]
+		}
+	]
+}

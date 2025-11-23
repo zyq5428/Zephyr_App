@@ -1,0 +1,57 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch-OpenOCD(stlink)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/zephyr/zephyr.elf",
+            "servertype": "openocd",
+            "serverpath": "E:/openocd/bin/openocd.exe",
+            "gdbPath": "C:/Users/59427/zephyr-sdk-0.17.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb.exe",
+            "device": "STM32L475VG",
+            "svdFile": "${workspaceFolder}/application/svd/STM32L475.svd",
+            "runToEntryPoint": "main",
+            "preLaunchTask": "West Build (pandora) with VENV",
+            "configFiles": [
+                "interface/stlink.cfg",
+                "target/stm32l4x.cfg"
+            ],
+            "searchDir": [
+                "E:/openocd/share/openocd/scripts"
+            ],
+            "serverArgs": [
+                "-c",
+                "init; reset init"
+            ],
+            "postLaunchCommands": [
+                "monitor reset halt",
+                "load"
+            ],
+            "showDevDebugOutput": "raw"
+        },
+        {
+            // -----------------------------------------------------------------
+            // 配置 2: Attach-OpenOCD(stlink) - 已修正连接端口
+            // -----------------------------------------------------------------
+            "name": "Attach-OpenOCD(stlink)",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/build/zephyr/zephyr.elf", 
+            "request": "attach",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "gdbPath": "C:/Users/59427/zephyr-sdk-0.17.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb.exe", 
+            "configFiles": [
+                "interface/stlink.cfg",
+                "target/stm32l4x.cfg"
+            ],
+            "device": "STM32L475VG",
+            "svdFile": "${workspaceFolder}/application/svd/STM32L475.svd",
+            "serverpath": "E:/openocd/bin/openocd.exe", 
+            "searchDir": [
+                "E:/openocd/share/openocd/scripts"
+            ]
+        }
+    ]
+}
