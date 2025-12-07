@@ -10,7 +10,7 @@
 #include "ap3216c_thread.h"
 
 // 启用日志记录
-LOG_MODULE_REGISTER(AP3216C_TASK, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(AP3216C_TASK, LOG_LEVEL_NONE);
 
 // 通过设备树别名获取I2C设备的规范结构
 // 别名 ap3216c-i2c 必须在 dts.overlay 中定义

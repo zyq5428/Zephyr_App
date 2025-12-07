@@ -1,0 +1,2 @@
+# Load board Kconfig descriptions.
+osource "E:/zephyrproject/zephyr/boards/alientek/pandora_stm32l475/Kconfig.pandora_stm32l475"

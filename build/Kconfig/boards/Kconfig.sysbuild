@@ -1,0 +1,2 @@
+# Load Sysbuild board Kconfig descriptions.
+osource "E:/zephyrproject/zephyr/boards/alientek/pandora_stm32l475/Kconfig.sysbuild"

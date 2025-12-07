@@ -16,7 +16,9 @@ target_sources(app PRIVATE
     src/main.c
     src/led_thread.c
     src/ap3216c_thread.c
+    src/display_thread.c
     drivers/ap3216c.c
+    drivers/lcd_screen.c
 )
 
 # 3. (可选) 链接所需的 Zephyr 库

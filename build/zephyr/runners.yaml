@@ -1,0 +1,35 @@
+# Available runners configured by board.cmake.
+runners:
+- openocd
+- jlink
+
+# Default flash runner if --runner is not given.
+flash-runner: openocd
+
+# Default debug runner if --runner is not given.
+debug-runner: openocd
+
+# Common runner configuration values.
+config:
+  board_dir: E:/zephyrproject/zephyr/boards/alientek/pandora_stm32l475
+  # Build outputs:
+  elf_file: zephyr.elf
+  hex_file: zephyr.hex
+  bin_file: zephyr.bin
+  # Host tools:
+  gdb: C:/Users/59427/zephyr-sdk-0.17.4/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb.exe
+  openocd: E:/openocd/bin/openocd.exe
+  openocd_search:
+    - C:\Program Files/OpenOCD/share/openocd/scripts
+
+# Runner specific arguments
+args:
+  openocd:
+    - --cmd-load
+    - flash write_image erase
+    - --cmd-verify
+    - verify_image
+  jlink:
+    - --dt-flash=y
+    - --device=STM32L475VE
+    - --speed=4000
