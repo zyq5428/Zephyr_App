@@ -35,23 +35,13 @@ void display_thread_entry(void *p1, void *p2, void *p3)
         return;
     }
 
-    lcd_fill_color(COLOR_BLACK);
+    lcd_fill_color(COLOR_GREEN);
     k_sleep(K_MSEC(500));
 
     lcd_draw_text("Hello Zephyr!", 10, 10, COLOR_WHITE);
     k_sleep(K_MSEC(1000));
 
     while (1) {
-        LOG_INF("Displaying RED");
-        lcd_fill_color(COLOR_RED);
-        k_sleep(K_MSEC(1000));
-
-        LOG_INF("Displaying GREEN");
-        lcd_fill_color(COLOR_GREEN);
-        k_sleep(K_MSEC(1000));
-
-        LOG_INF("Displaying BLUE");
-        lcd_fill_color(COLOR_BLUE);
         k_sleep(K_MSEC(1000));
     }
 }
