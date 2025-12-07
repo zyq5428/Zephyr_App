@@ -1,4 +1,0 @@
-west:
-  command: E:\zephyrproject\.venv\Scripts\west build -b pandora_stm32l475 -t menuconfig
-  topdir: E:\zephyrproject
-  version: 1.5.0

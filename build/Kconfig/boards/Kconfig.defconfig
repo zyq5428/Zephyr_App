@@ -1,2 +1,0 @@
-# Load Zephyr board defconfig descriptions.
-osource "E:/zephyrproject/zephyr/boards/alientek/pandora_stm32l475/Kconfig.defconfig"
