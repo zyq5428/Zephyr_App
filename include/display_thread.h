@@ -7,8 +7,8 @@
 #define DISPLAY_THREAD_H
 
 /**
- * @brief Entry point for the display thread.
+ * @brief 启动显示线程
  */
-void display_thread_entry(void *p1, void *p2, void *p3);
+void start_display_thread(void);
 
 #endif /* DISPLAY_THREAD_H */

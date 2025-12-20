@@ -6,11 +6,6 @@
 // 启用日志记录
 LOG_MODULE_REGISTER(LED_TASK, LOG_LEVEL_INF);
 
-// 线程栈和定义
-#define LED_STACK_SIZE 512
-K_THREAD_STACK_DEFINE(led_stack_area, LED_STACK_SIZE);
-struct k_thread led_thread_data;
-
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   1000
 
@@ -56,16 +51,16 @@ void led_thread_entry(void *p1, void *p2, void *p3)
     }
 }
 
+// 线程栈和定义
+#define LED_STACK_SIZE 512
+#define LED_PRIORITY 10
+
+K_THREAD_DEFINE(led_tid, LED_STACK_SIZE, 
+                led_thread_entry, NULL, NULL, NULL,
+                LED_PRIORITY, 0, 0);
+
 void start_led_thread(void)
 {
-    // 创建并启动线程
-    k_thread_create(&led_thread_data, 
-                    led_stack_area,
-                    LED_STACK_SIZE,
-                    led_thread_entry,
-                    NULL, NULL, NULL,
-                    5, K_USER | K_FP_REGS, K_FOREVER);
-
-    k_thread_name_set(&led_thread_data, "LED_Control");
-    k_thread_start(&led_thread_data);
+    // 线程已在 K_THREAD_DEFINE 中自动启动，此函数仅用于提供统一的启动接口
+    LOG_DBG("LED thread defined and started.");
 }

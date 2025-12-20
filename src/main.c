@@ -10,7 +10,7 @@ int main(void)
     // 启动所有的独立线程
     start_led_thread();
     start_ap3216c_thread();
-    // display_thread使用K_THREAD_DEFINE自动启动，无需手动调用
+    start_display_thread();
 
     // main 线程可以做一些不频繁的后台任务，或者直接退出（如果有其他线程在运行）
     return 0;

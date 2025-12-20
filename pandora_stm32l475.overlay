@@ -1,13 +1,16 @@
 /* pandora_stm32l475.overlay */
+#include <zephyr/dt-bindings/display/panel.h>
+#include <zephyr/dt-bindings/i2c/i2c.h>
 
 / {
-	aliases {
-		led1 = &green_led;
-		ap3216c-i2c = &ap3216c;
+	chosen {
+		zephyr,display = &sh1106_oled;
 	};
 
-	chosen {
-		zephyr,display = &st7789v;
+	aliases {
+		led0 = &red_led;
+		led1 = &green_led;
+		ap3216c-i2c = &ap3216c;
 	};
 
 	leds {
@@ -34,6 +37,48 @@
 	};
 };
 
+&dma1 {
+	status = "okay";
+};
+
+&dma2 {
+	status = "okay";
+};
+
+dmauart: &usart1 {
+	dmas = <&dma2 6 2 (STM32_DMA_PERIPH_TX | STM32_DMA_PRIORITY_HIGH)>,
+	       <&dma2 7 2 (STM32_DMA_PERIPH_RX | STM32_DMA_PRIORITY_HIGH)>;
+	dma-names = "tx", "rx";
+};
+
+&i2c1 {
+	status = "okay";
+    pinctrl-0 = <&i2c1_scl_pb8 &i2c1_sda_pb9>; // 确认PB8/PB9引脚 i2c1_scl_pb8,i2c1_sda_pb9
+	pinctrl-names = "default";
+    clock-frequency = <I2C_BITRATE_FAST>;
+	dmas = <&dma1 6 3 STM32_DMA_PERIPH_TX>,
+	       <&dma1 7 3 STM32_DMA_PERIPH_RX>;
+	dma-names = "tx", "rx";
+	// SH1106 节点 (标记为自定义，避免 Zephyr 内置驱动启用)
+	sh1106_oled: sh1106@3c {
+		compatible = "custom,sh1106"; // custom compatible to avoid built-in driver
+		reg = <0x3c>;               // Device I2C address (0x3C)
+		status = "okay";
+		width = <128>;
+		height = <64>;
+		// pixel-format = <PIXEL_FORMAT_MONO10>;
+		/* Keep typical values in DT for diagnostics, but these are not consumed by our test driver */
+		segment-offset = <2>;
+		page-offset = <0>;
+		display-offset = <0>;
+		multiplex-ratio = <63>;
+		prechargep = <0x22>; /* typical SSD1306 precharge period value */
+		/* Optional flags: segment-remap, com-invdir, com-sequential */
+		segment-remap;
+		com-invdir;
+	};
+};
+
 &i2c3 {
 	status = "okay";
     pinctrl-0 = <&i2c3_scl_pc0 &i2c3_sda_pc1>; // 确认PC0/PC1引脚 i2c3_scl_pc0,i2c3_sda_pc1
@@ -47,60 +92,5 @@
     };
 };
 
-/* SPI3配置 - LCD使用PB3(SCK)和PB5(MOSI) */
-&spi3 {
-	pinctrl-0 = <&spi3_sck_pb3 &spi3_mosi_pb5>;
-	pinctrl-names = "default";
-	status = "okay";
 
-	cs-gpios = <&gpiod 7 GPIO_ACTIVE_LOW>;    // LCD_CS -> PD7
-
-    /*
-     * 1. MIPI DBI SPI Emulation Controller Node:
-     * - compatible = "zephyr,mipi-dbi-spi" (满足 Kconfig 依赖)
-     * - 包含控制显示屏的 GPIO 信号 (CS/DC/RESET)
-     */
-	mipi_dbi_ctrl: mipi_dbi_ctrl@0 {
-        compatible = "zephyr,mipi-dbi-spi";
-        reg = <0>; // 逻辑上的 SPI 片选地址 0
-		spi-dev = <&spi3>;
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-        dc-gpios = <&gpiob 4 GPIO_ACTIVE_HIGH>;   // LCD_WR/DC -> PB4
-        reset-gpios = <&gpiob 6 GPIO_ACTIVE_LOW>; // LCD_RESET -> PB6
-
-        /*
-         * 2. ST7789V Display Device Node:
-         * - 兼容字符串只保留 "sitronix,st7789v"
-         * - 成为 mipi_dbi_ctrl 的子节点
-         */
-        st7789v: st7789v@0 {
-            compatible = "sitronix,st7789v";
-            reg = <0>; // 在 MIPI DBI 总线上的地址
-            mipi-max-frequency = <20000000>;
-            mipi-mode = "MIPI_DBI_MODE_SPI_4WIRE"; // 明确指定 4 线 SPI 模式 (需要 DC 信号)
-
-            width = <240>;
-            height = <240>;
-            x-offset = <0>;
-            y-offset = <0>;
-            vcom = <0x19>;
-            gctrl = <0x35>;
-            vrhs = <0x12>;
-            vdvs = <0x20>;
-            mdac = <0x00>;
-            lcm = <0x2c>;
-            colmod = <0x65>; // RGB565 colmod = <0x05>
-            gamma = <0x01>;
-            porch-param = [0c 0c 00 33 33];
-            cmd2en-param = [5a 69 02 01];
-            pwctrl1-param = [a4 a1];
-            pvgam-param = [D0 04 0D 11 13 2B 3F 54 4C 18 0D 0B 1F 23];
-            nvgam-param = [D0 04 0C 11 13 2C 3F 44 51 2F 1F 1F 20 23];
-            ram-param = [00 F0];  // RAM 访问模式
-            rgb-param = [CD 08 14];
-        };
-    };
-};
 

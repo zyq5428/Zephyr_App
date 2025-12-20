@@ -10,7 +10,7 @@
 #include "ap3216c_thread.h"
 
 // 启用日志记录
-LOG_MODULE_REGISTER(AP3216C_TASK, LOG_LEVEL_NONE);
+LOG_MODULE_REGISTER(AP3216C_TASK, LOG_LEVEL_INF);
 
 // 通过设备树别名获取I2C设备的规范结构
 // 别名 ap3216c-i2c 必须在 dts.overlay 中定义
@@ -36,7 +36,7 @@ static int ap3216c_init(void)
     if (ret != 0) {
         LOG_ERR("Failed to set mode AP3216C: %d", ret);
     } else {
-        LOG_INF("AP3216C initialized and set to ALS/PS mode successfully.");
+        LOG_DBG("AP3216C initialized and set to ALS/PS mode successfully.");
     }
 
     // 3. (可选) 设置 ALS 增益为 AP3216C_ALS_GAIN1 (1x 增益，最大量程)
@@ -90,7 +90,7 @@ void ap3216c_thread_entry(void *p1, void *p2, void *p3)
         ret = read_ap3216c_als_data(&als_value);
 
         if (ret == 0) {
-            LOG_INF("ALS Data: %u raw", als_value);
+            LOG_DBG("ALS Data: %u raw", als_value);
         } else {
             LOG_WRN("Failed to read ALS data: %d", ret);
         }
