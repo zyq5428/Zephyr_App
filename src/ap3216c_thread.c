@@ -103,16 +103,9 @@ void ap3216c_thread_entry(void *p1, void *p2, void *p3)
 /* --- 线程定义和启动 --- */
 
 // 定义栈空间、优先级和线程入口函数
-#define AP3216C_STACK_SIZE 1024
+#define AP3216C_STACK_SIZE 768
 #define AP3216C_PRIORITY 7 // 较低的优先级，因为是周期性读取
 
 K_THREAD_DEFINE(ap3216c_tid, AP3216C_STACK_SIZE, 
                 ap3216c_thread_entry, NULL, NULL, NULL,
                 AP3216C_PRIORITY, 0, 0);
-
-
-void start_ap3216c_thread(void)
-{
-    // 线程已在 K_THREAD_DEFINE 中自动启动，此函数仅用于提供统一的启动接口
-    LOG_DBG("AP3216C thread defined and started.");
-}
