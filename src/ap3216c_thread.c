@@ -16,6 +16,10 @@ LOG_MODULE_REGISTER(AP3216C_TASK, LOG_LEVEL_INF);
 // 别名 ap3216c-i2c 必须在 dts.overlay 中定义
 static const struct i2c_dt_spec ap3216c_i2c_spec = I2C_DT_SPEC_GET(DT_ALIAS(ap3216c_i2c));
 
+// --- 新增：全局变量，用于存储最新的光感值 ---
+// 使用 volatile 关键字告诉编译器该变量可能在程序流程之外被修改
+volatile uint16_t g_als_raw_value = 0;
+
 /**
  * @brief 初始化 AP3216C 传感器
  */
@@ -49,16 +53,6 @@ static int ap3216c_init(void)
     return ret;
 }
 
-/**
- * @brief 从 AP3216C 读取 ALS（环境光）
- */
-static int read_ap3216c_als_data(uint16_t *als_data)
-{
-    // 调用新的驱动读取函数
-    return ap3216c_read_als_raw(&ap3216c_i2c_spec, als_data);
-}
-
-
 /* --- 线程入口点 --- */
 
 void ap3216c_thread_entry(void *p1, void *p2, void *p3)
@@ -87,9 +81,10 @@ void ap3216c_thread_entry(void *p1, void *p2, void *p3)
 
     // 3. 周期性读取数据
     while (1) {
-        ret = read_ap3216c_als_data(&als_value);
+        ret = ap3216c_read_als_raw(&ap3216c_i2c_spec, &als_value);
 
         if (ret == 0) {
+            g_als_raw_value = als_value;
             LOG_DBG("ALS Data: %u raw", als_value);
         } else {
             LOG_WRN("Failed to read ALS data: %d", ret);

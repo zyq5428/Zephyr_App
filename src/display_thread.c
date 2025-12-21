@@ -12,26 +12,38 @@
 
 LOG_MODULE_REGISTER(Display_TASK, LOG_LEVEL_INF);
 
+// --- 引用外部全局变量 ---
+extern volatile uint16_t g_als_raw_value;
+
 /* --- 全局变量与定义 --- */
 static lv_obj_t * monitor_label;    // 用于显示内存信息的标签
+static lv_obj_t * als_label;        // 左上角光感值标签
+static lv_obj_t * als_slider;       // --- 新增：光感进度条 ---
 static lv_obj_t * test_area;        // 用于放置测试组件的容器
 static uint32_t step = 0;
 
 /**
- * 手动更新内存数据，不使用内置宏
+ * 定时器回调函数：更新内存使用情况和光感数值
  */
-void mem_monitor_task(lv_timer_t * timer) {
+void ui_update_task(lv_timer_t * timer) {
+    // 1. 更新内存显示 (原有逻辑)
     lv_mem_monitor_t mon;
-    lv_mem_monitor(&mon); // 获取内存数据
+    lv_mem_monitor(&mon);
+    char mem_buf[16];
+    snprintf(mem_buf, sizeof(mem_buf), "M:%d%%", mon.used_pct);
+    lv_label_set_text(monitor_label, mem_buf);
 
-    char buf[32];
-    // 128x64 屏幕窄，我们显示核心数据即可
-    // used_pct: 百分比
-    snprintf(buf, sizeof(buf), "Used:%d%%", mon.used_pct);
+    // 2. 更新光感数值标签
+    uint16_t current_als = g_als_raw_value;
+    char als_buf[20];
+    snprintf(als_buf, sizeof(als_buf), "ALS:%u", current_als);
+    lv_label_set_text(als_label, als_buf);
 
-    if (monitor_label) {
-        lv_label_set_text(monitor_label, buf);
-    }
+    // 3. --- 新增：更新进度条数值 ---
+    // AP3216C 在当前配置下的最大值约为 20661
+    // 我们将滑块范围设为 0-1000，方便观察细微变化
+    // 使用 lv_slider_set_value(对象, 数值, 是否使用动画)
+    lv_slider_set_value(als_slider, current_als, LV_ANIM_ON);
 }
 
 /* --- 组件切换逻辑 --- */
@@ -40,34 +52,33 @@ void switch_test_widget(void) {
     lv_obj_clean(test_area);
     
     switch (step % 4) {
-        case 0: { // 测试按钮
+        case 0: { 
             lv_obj_t * btn = lv_btn_create(test_area);
-            lv_obj_set_size(btn, 70, 30);
+            lv_obj_set_size(btn, 60, 20);
             lv_obj_align(btn, LV_ALIGN_CENTER, 0, 0);
             lv_obj_t * l = lv_label_create(btn);
-            lv_label_set_text(l, "Button");
+            lv_label_set_text(l, "OK");
             lv_obj_center(l);
             break;
         }
-        case 1: { // 测试滑块
-            lv_obj_t * slider = lv_slider_create(test_area);
-            lv_obj_set_size(slider, 100, 10);
-            lv_obj_align(slider, LV_ALIGN_CENTER, 0, 0);
-            lv_slider_set_value(slider, 50, LV_ANIM_OFF);
-            break;
-        }
-        case 2: { // 测试复选框
+        case 1: { 
             lv_obj_t * cb = lv_checkbox_create(test_area);
-            lv_checkbox_set_text(cb, "Monitor ON");
-            lv_obj_add_state(cb, LV_STATE_CHECKED);
+            lv_checkbox_set_text(cb, "Auto");
             lv_obj_align(cb, LV_ALIGN_CENTER, 0, 0);
             break;
         }
-        case 3: { // 测试圆弧 (Arc)
-            lv_obj_t * arc = lv_arc_create(test_area);
-            lv_obj_set_size(arc, 40, 40);
-            lv_obj_align(arc, LV_ALIGN_CENTER, 0, 0);
-            lv_arc_set_value(arc, 60); // 设置一个初始进度值
+        case 2: { 
+            lv_obj_t * bar = lv_bar_create(test_area);
+            lv_obj_set_size(bar, 80, 10);
+            lv_obj_align(bar, LV_ALIGN_CENTER, 0, 0);
+            lv_bar_set_value(bar, 70, LV_ANIM_OFF);
+            break;
+        }
+        case 3: { 
+            lv_obj_t * led = lv_led_create(test_area);
+            lv_obj_set_size(led, 15, 15);
+            lv_obj_align(led, LV_ALIGN_CENTER, 0, 0);
+            lv_led_on(led);
             break;
         }
     }
@@ -88,33 +99,52 @@ void display_thread_entry(void)
     // 1. 初始化基础布局
     lv_obj_clean(lv_scr_act()); // 清空屏幕
 
-    // 创建顶部的内存监控标签
+    // --- 创建右上角内存标签 ---
     monitor_label = lv_label_create(lv_scr_act());
     lv_obj_align(monitor_label, LV_ALIGN_TOP_RIGHT, -2, 0);
 
+    // --- 新增：创建左上角光感值标签 ---
+    als_label = lv_label_create(lv_scr_act());
+    lv_obj_align(als_label, LV_ALIGN_TOP_LEFT, 2, 0);
+
+    // 新增：创建中间的进度条 (Slider) ---
+    als_slider = lv_slider_create(lv_scr_act());
+    lv_obj_set_size(als_slider, 100, 8); // 高度稍微减小到 8 像素，节省空间
+    // LV_ALIGN_TOP_MID 表示对齐到顶部中间，y=20 表示距离顶部 20 像素（避开了标签）
+    lv_obj_align(als_slider, LV_ALIGN_TOP_MID, 0, 20);
+    
+    // 设置滑块范围：0 到 20661 (对应传感器的最大量程)
+    lv_slider_set_range(als_slider, 0, 20661);
+    // 禁用用户手动拖动（因为它是用来展示数据的，不是输入的）
+    lv_obj_clear_flag(als_slider, LV_OBJ_FLAG_CLICKABLE);
+
     // 创建一个 LVGL 定时器，每秒更新一次
     // 这样比在 while(1) 里更新更安全，不会抢占渲染资源
-    lv_timer_create(mem_monitor_task, 1000, NULL);
+    // 修改定时器：每 500ms 更新一次 UI 数据
+    lv_timer_create(ui_update_task, 500, NULL);
     
-    // 创建下方的测试组件区域
+    // 下方测试区域：强制对齐到底部
     test_area = lv_obj_create(lv_scr_act());
-    lv_obj_set_size(test_area, 128, 45);
+    // 高度缩小为 25 像素，防止它往上生长
+    lv_obj_set_size(test_area, 128, 25); 
+    // 对齐到底部中心
     lv_obj_align(test_area, LV_ALIGN_BOTTOM_MID, 0, 0);
-    lv_obj_set_style_border_width(test_area, 1, 0); // 画个边框区分
-    lv_obj_set_style_pad_all(test_area, 2, 0);
+    // 关键：移除容器的内边距(Padding)和边框，这样里面的内容不会显得太拥挤
+    lv_obj_set_style_pad_all(test_area, 0, 0); 
+    lv_obj_set_style_border_width(test_area, 1, 0); // 保留 1 像素边框
 
     uint32_t last_switch = 0;
 
     while (1) {
         // 每 2 秒切换一次组件
-        if (k_uptime_get_32() - last_switch > 2000) {
+        if (k_uptime_get_32() - last_switch > 3000) {
             switch_test_widget();
             last_switch = k_uptime_get_32();
         }
 
         // 运行 LVGL 任务处理器
         lv_timer_handler();
-        k_msleep(50);
+        k_msleep(30);
     }
 }
 
