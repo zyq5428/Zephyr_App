@@ -13,7 +13,9 @@
 LOG_MODULE_REGISTER(Display_TASK, LOG_LEVEL_INF);
 
 // --- 引用外部全局变量 ---
-extern volatile uint16_t g_als_raw_value;
+// extern volatile uint16_t g_als_raw_value;
+// --- 引用外部定义的消息队列 ---
+extern struct k_msgq als_msgq;
 
 /* --- 全局变量与定义 --- */
 static lv_obj_t * monitor_label;    // 用于显示内存信息的标签
@@ -23,27 +25,36 @@ static lv_obj_t * test_area;        // 用于放置测试组件的容器
 static uint32_t step = 0;
 
 /**
- * 定时器回调函数：更新内存使用情况和光感数值
+ * 此时 UI 更新函数只负责显示“最新”的数据
+ * 我们用一个静态变量保存从队列拿到的值
  */
+static uint16_t last_received_als = 0;
+
 void ui_update_task(lv_timer_t * timer) {
-    // 1. 更新内存显示 (原有逻辑)
+    // 更新内存显示 (原有逻辑)
     lv_mem_monitor_t mon;
     lv_mem_monitor(&mon);
     char mem_buf[16];
     snprintf(mem_buf, sizeof(mem_buf), "M:%d%%", mon.used_pct);
     lv_label_set_text(monitor_label, mem_buf);
 
-    // 2. 更新光感数值标签
-    uint16_t current_als = g_als_raw_value;
-    char als_buf[20];
-    snprintf(als_buf, sizeof(als_buf), "ALS:%u", current_als);
-    lv_label_set_text(als_label, als_buf);
+    // 尝试从队列中读取数据
+    // K_NO_WAIT 表示如果没有新消息，立刻返回，不阻塞 LVGL 渲染
+    uint16_t temp_val;
+    if (k_msgq_get(&als_msgq, &temp_val, K_NO_WAIT) == 0) {
+        last_received_als = temp_val; // 只有拿到新消息才更新
+    }
 
-    // 3. --- 新增：更新进度条数值 ---
+    // 更新标签和滑块
+    char buf[20];
+    snprintf(buf, sizeof(buf), "ALS:%u", last_received_als);
+    lv_label_set_text(als_label, buf);
+
+    // 更新进度条数值 ---
     // AP3216C 在当前配置下的最大值约为 20661
     // 我们将滑块范围设为 0-1000，方便观察细微变化
     // 使用 lv_slider_set_value(对象, 数值, 是否使用动画)
-    lv_slider_set_value(als_slider, current_als, LV_ANIM_ON);
+    lv_slider_set_value(als_slider, last_received_als, LV_ANIM_ON);
 }
 
 /* --- 组件切换逻辑 --- */
