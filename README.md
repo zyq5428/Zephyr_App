@@ -31,6 +31,7 @@ Get-ChildItem -Path .\dts\bindings\sensor -Recurse -Include *.yaml | Select-Stri
 ### 查搜索子目录内的所有文件内容，查找含有'DMA'文件
 ```
 Get-ChildItem -Path . -Recurse -Filter *.* | Select-String -Pattern "DMA"
+Get-ChildItem -Path . -Recurse -Include *.overlay,*.dts | Select-String -Pattern "st7789"
 ```
 - 命令解释：
     - Get-ChildItem -Path . -Recurse: 递归地获取当前目录 (.) 及其所有子目录下的所有文件和文件夹。
@@ -74,3 +75,12 @@ CONFIG_THREAD_ANALYZER=y
 kernel threads
 kernel thread analyzer
 ```
+
+## ST7789V SPI屏引脚配置
+
+- SPI2_CLK  PB13
+- SPI2_MOSI PB15
+- RES       PB10
+- DC        PB11
+- CS        PB12
+- BLK       PB14

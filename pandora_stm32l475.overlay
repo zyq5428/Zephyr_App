@@ -4,12 +4,14 @@
 
 / {
 	chosen {
-		zephyr,display = &sh1106_oled;
+		// zephyr,display = &sh1106_oled;
+		zephyr,display = &st7789v;
 	};
 
 	aliases {
 		led0 = &red_led;
 		led1 = &green_led;
+		// lcd-backlight = &backlight_led;
 		ap3216c-i2c = &ap3216c;
 	};
 
@@ -34,6 +36,10 @@
 		blue_led: led_2 {
 			gpios = <&gpioe 9 GPIO_ACTIVE_LOW>;
 		};
+
+		// backlight_led: led_3 {
+		// 	gpios = <&gpioc 4 GPIO_ACTIVE_HIGH>;
+		// };
 	};
 };
 
@@ -63,7 +69,7 @@ dmauart: &usart1 {
 	sh1106_oled: sh1106@3c {
 		compatible = "custom,sh1106"; // custom compatible to avoid built-in driver
 		reg = <0x3c>;               // Device I2C address (0x3C)
-		status = "okay";
+		status = "disabled";
 		width = <128>;
 		height = <64>;
 		// pixel-format = <PIXEL_FORMAT_MONO10>;
@@ -92,5 +98,49 @@ dmauart: &usart1 {
     };
 };
 
+/* SPI2配置 - LCD使用PB13(SCK)和PB15(MOSI)
+- SPI2_CLK  PB13
+- SPI2_MOSI PB15
+- RES       PB10
+- DC        PB11
+- CS        PB12
+- BLK       PC4
+*/
+&spi2 {
+	pinctrl-0 = <&spi2_nss_pb12 &spi2_sck_pb13 &spi2_mosi_pb15>;
+	pinctrl-names = "default";
+	status = "okay";
 
+	// cs-gpios = <&gpiod 12 GPIO_ACTIVE_LOW>;
+	st7789v: st7789v@0 {
+		compatible = "custom,st7789v";
+		spi-max-frequency = <2000000>;
+		reg = <0>;
+
+        dc-gpios = <&gpiob 11 GPIO_ACTIVE_HIGH>;	// LCD_WR/DC -> PB11
+        reset-gpios = <&gpiob 10 GPIO_ACTIVE_LOW>;	// LCD_RESET -> PB10
+		bl-gpios = <&gpioc 4 GPIO_ACTIVE_HIGH>;	 	// LCD_BLK -> PC4
+			
+		width = <240>;
+		height = <280>;
+		x-offset = <0>;
+		y-offset = <20>;
+		vcom = <0x3F>;
+		gctrl = <0x05>;
+		vrhs = <0x0F>;
+		vdvs = <0x20>;
+		mdac = <0x00>;
+		gamma = <0x01>;
+		colmod = <0x05>;
+		lcm = <0x2c>;
+		porch-param = [0c 0c 00 33 33];
+		cmd2en-param = [5a 69 02 01];
+		pwctrl1-param = [a4 a1];
+		pvgam-param = [D0 05 09 09 08 14 28 33 3F 07 13 14 28 30];
+		nvgam-param = [D0 05 09 09 08 03 24 32 32 3B 14 13 28 2F];
+		ram-param = [00 F0];
+		rgb-param = [CD 08 14];
+		// inversion-off;
+	};
+};
 

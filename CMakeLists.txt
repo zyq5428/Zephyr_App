@@ -38,6 +38,7 @@ target_sources(app PRIVATE
     src/display_thread.c
     drivers/ap3216c_drv.c
     drivers/ssd1306_drv.c
+    drivers/st7789v_drv.c
 )
 
 # (可选) 链接所需的 Zephyr 库

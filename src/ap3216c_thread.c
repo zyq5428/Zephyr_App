@@ -90,7 +90,7 @@ void ap3216c_thread_entry(void *p1, void *p2, void *p3)
         if (ret == 0) {
             // g_als_raw_value = als_value;
             // K_NO_WAIT 表示如果队列满了，不等待直接跳过
-            k_msgq_put(&als_msgq, &als_value, K_NO_WAIT);
+            // k_msgq_put(&als_msgq, &als_value, K_NO_WAIT);
             LOG_DBG("ALS Data: %u raw", als_value);
         } else {
             LOG_WRN("Failed to read ALS data: %d", ret);

@@ -1,0 +1,113 @@
+# custom,st7789v.yaml
+
+description: ST7789V 屏幕驱动自定义绑定文件
+
+# 这里的 compatible 必须和 Overlay 里的保持一致
+compatible: "custom,st7789v"
+
+# 表示这是一个 SPI 设备，会自动继承 SPI 相关的标准属性（如 reg, spi-max-frequency）
+include: spi-device.yaml
+
+properties:
+  # 引脚定义
+  dc-gpios:
+    type: phandle-array
+    required: true
+    description: 数据/命令选择引脚 (DC)
+
+  reset-gpios:
+    type: phandle-array
+    required: false
+    description: 复位引脚 (RESET)
+
+  bl-gpios:
+    type: phandle-array
+    required: false
+    description: 背光控制引脚 (Backlight)
+
+  # 屏幕参数定义
+  width:
+    type: int
+    required: true
+    description: 屏幕像素宽度
+
+  height:
+    type: int
+    required: true
+    description: 屏幕像素高度
+
+  x-offset:
+    type: int
+    required: true
+  
+  y-offset:
+    type: int
+    required: true
+
+  # 寄存器配置参数
+  vcom:
+    type: int
+    required: true
+  
+  gctrl:
+    type: int
+    required: true
+
+  vrhs:
+    type: int
+  
+  vdvs:
+    type: int
+
+  mdac:
+    type: int
+    required: true
+
+  gamma:
+    type: int
+    required: true
+
+  colmod:
+    type: int
+    required: true
+
+  lcm:
+    type: int
+    required: true
+
+  inversion-off:
+    type: boolean
+    description: 如果存在此属性，则关闭颜色反转
+
+  # 数组类型的参数 (对应你代码里的 uint8_t 数组)
+  porch-param:
+    type: uint8-array
+    required: true
+
+  cmd2en-param:
+    type: uint8-array
+    required: true
+
+  pwctrl1-param:
+    type: uint8-array
+    required: true
+
+  pvgam-param:
+    type: uint8-array
+    required: true
+
+  nvgam-param:
+    type: uint8-array
+    required: true
+
+  ram-param:
+    type: uint8-array
+    required: true
+
+  rgb-param:
+    type: uint8-array
+    required: true
+
+  ready-time-ms:
+    type: int
+    default: 120

@@ -4,7 +4,7 @@
 #include "led_thread.h"
 
 // 启用日志记录
-LOG_MODULE_REGISTER(LED_TASK, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(LED_TASK, LOG_LEVEL_WRN);
 
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   1000
@@ -52,7 +52,7 @@ void led_thread_entry(void *p1, void *p2, void *p3)
 }
 
 // 线程栈和定义
-#define LED_STACK_SIZE 256
+#define LED_STACK_SIZE 512
 #define LED_PRIORITY 10
 
 K_THREAD_DEFINE(led_tid, LED_STACK_SIZE, 
