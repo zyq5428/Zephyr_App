@@ -39,12 +39,23 @@ Get-ChildItem -Path . -Recurse -Include *.overlay,*.dts | Select-String -Pattern
     - |: 管道操作符，将前一个命令的输出传递给后一个命令。
     - Select-String -Pattern "DMA": 在接收到的所有文件的内容中搜索包含字符串 "DMA" 的行。
 
-## 编译指定开发板
+## west常用命令
+
+### 编译指定开发板
+
 ```
 west build -p always -b stm32f429i_disc1 samples\basic\blinky
-west build -p auto -b pandora_stm32l475 ..\application
-west build -b pandora_stm32l475 -t menuconfig .\application\
-west build -b pandora_stm32l475 -t guiconfig .\application\
+west build -p auto -b pandora_stm32l475 ..\app
+west build -b pandora_stm32l475 -t menuconfig .\app
+west build -b pandora_stm32l475 -t guiconfig .\app
+west build -t clean
+```
+
+### 清理构建（Build）目录
+
+```
+west build -t clean
+west build -t traceconfig
 ```
 
 ## overlay设置

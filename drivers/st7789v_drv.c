@@ -518,7 +518,7 @@ static int st7789v_init(const struct device *dev)
 		return ret;
 	}
 
-	LOG_INF("ST7789V 驱动初始化序列全部发送成功");
+	LOG_DBG("ST7789V 驱动初始化序列全部发送成功");
 	return ret;
 }
 
