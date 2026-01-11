@@ -11,6 +11,7 @@
 	aliases {
 		led0 = &red_led;
 		led1 = &green_led;
+		pwm-led0 = &backlight_pwm_led;
 		// lcd-backlight = &backlight_led;
 		ap3216c-i2c = &ap3216c;
 	};
@@ -41,6 +42,21 @@
 		// 	gpios = <&gpioc 4 GPIO_ACTIVE_HIGH>;
 		// };
 	};
+	/* 定义 PWM LED 节点 */
+	pwmleds: pwmleds {
+		compatible = "pwm-leds";
+		status = "okay";
+		/* * 定义名为 test_pwm_led 的节点
+		 * <&pwm4   : 使用 TIM4 定时器
+		 * 4       : 使用第 4 通道 (对应 PD15)
+		 * PWM_MSEC(20) : PWM 周期 20ms (50Hz)，适合 LED 调光
+		 * 100000 : 10KHz 对应周期 100,000 ns, 适用于无极级调光背光
+		 * PWM_POLARITY_NORMAL> : 正常极性 (高电平有效/点亮)
+		 */
+		backlight_pwm_led: backlight_pwm_led {
+			pwms = <&pwm4 4 100000 PWM_POLARITY_NORMAL>;
+		};
+	};
 };
 
 &dma1 {
@@ -55,6 +71,20 @@ dmauart: &usart1 {
 	dmas = <&dma2 6 2 (STM32_DMA_PERIPH_TX | STM32_DMA_PRIORITY_HIGH)>,
 	       <&dma2 7 2 (STM32_DMA_PERIPH_RX | STM32_DMA_PRIORITY_HIGH)>;
 	dma-names = "tx", "rx";
+};
+
+/* 启用 TIM4 定时器 */
+&timers4 {
+	status = "okay";
+	/* 预分频器设为 0，获得最大频率（80MHz时钟源） */
+	st,prescaler = <0>;
+
+	pwm4: pwm {
+		status = "okay";
+		/* 引用上面定义的 pinctrl */
+		pinctrl-0 = <&tim4_ch4_pd15>;
+		pinctrl-names = "default";
+	};
 };
 
 &i2c1 {
