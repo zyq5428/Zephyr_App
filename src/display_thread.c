@@ -7,6 +7,9 @@
 
 LOG_MODULE_REGISTER(Display_TASK, LOG_LEVEL_INF);
 
+/* 获取显示设备句柄 */
+static const struct device *dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+
 /* --- UI 句柄 --- */
 static lv_obj_t * main_arc;
 static lv_obj_t * val_label;
@@ -32,11 +35,15 @@ static void ui_timer_cb(lv_timer_t * t) {
 
     // 将数据推入波形图
     lv_chart_set_next_value(main_chart, main_ser, display_val);
+
+    display_set_brightness(dev, display_val); // 动态调节亮度
 }
 
 void display_thread_entry(void) {
-    const struct device *dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
-    if (!device_is_ready(dev)) return;
+    if (!device_is_ready(dev)) {
+        LOG_ERR("Display device not ready");
+        return;
+    }
 
     // 1. 设置你喜欢的蓝黑色背景 (深蓝色 0x001529)
     lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0x001529), 0);

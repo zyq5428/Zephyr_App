@@ -18,6 +18,8 @@
 #include <zephyr/pm/device.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/drivers/display.h>
+#include <zephyr/drivers/pwm.h>
+#include <zephyr/sys/util.h>
 #include <zephyr/logging/log.h>
 
 LOG_MODULE_REGISTER(st7789_direct, LOG_LEVEL_INF);
@@ -29,6 +31,7 @@ struct st7789v_config {
     struct gpio_dt_spec dc_gpio;  // DC 引脚
     struct gpio_dt_spec rst_gpio; // Reset 引脚
     struct gpio_dt_spec bl_gpio;  // Backlight 引脚 (可选)
+	struct pwm_dt_spec bl_pwm;  // Backlight-pwm 引脚 (可选)
 	uint8_t vcom;
 	uint8_t gctrl;
 	bool vdv_vrh_enable;
@@ -449,6 +452,40 @@ static int st7789v_lcd_init(const struct device *dev)
 }
 
 /**
+ * @brief 内部函数：设置背光状态
+ * @param brightness 亮度值 (0-100)
+ */
+static int st7789v_set_backlight(const struct device *dev, uint8_t brightness)
+{
+    const struct st7789v_config *config = dev->config;
+
+    /* 优先级 1：检查 PWM 是否有效 */
+    if (pwm_is_ready_dt(&config->bl_pwm)) {
+		// 将 brightness 限制在 0 到 255 之间
+		uint8_t safe_brightness = CLAMP(brightness, 0, 255);
+		uint32_t pulse = (config->bl_pwm.period * safe_brightness) / 255;
+        int ret = pwm_set_dt(&config->bl_pwm, config->bl_pwm.period, pulse);
+        // LOG_INF("使用 PWM 调节亮度: %d%%", brightness);
+        return ret; // 处理完毕，直接退出
+    }
+
+    /* 优先级 2：检查 GPIO 是否有效 (只有 PWM 无效时才会走到这里) */
+    if (config->bl_gpio.port != NULL) {
+		if (!gpio_is_ready_dt(&config->bl_gpio)) {
+            return -ENODEV;
+        }
+        // GPIO 只有开关，通常亮度 > 0 就打开
+        int ret = gpio_pin_set_dt(&config->bl_gpio, brightness > 0 ? 1 : 0);
+        // LOG_INF("使用 GPIO 控制背光: %s", brightness > 0 ? "开启" : "关闭");
+        return ret;
+    }
+
+    /* 如果走到这里，说明用户既没配 PWM 也没配 GPIO */
+    // LOG_WRN("未发现任何背光控制配置");
+	return -ENOTSUP; // 既没 PWM 也没 GPIO，返回“不支持”
+}
+
+/**
  * @brief 屏幕初始化流程
  */
 static int st7789v_init(const struct device *dev)
@@ -478,9 +515,9 @@ static int st7789v_init(const struct device *dev)
 	if (config->rst_gpio.port) {
 		gpio_pin_configure_dt(&config->rst_gpio, GPIO_OUTPUT_INACTIVE);
 	}
-	if (config->bl_gpio.port) {
-		gpio_pin_configure_dt(&config->bl_gpio, GPIO_OUTPUT_ACTIVE); // 开启背光
-	}
+
+	/* 初始化时开启背光 (假设设为100%) */
+    st7789v_set_backlight(dev, 100);
 
 	// 设备复位
 	ret = st7789v_reset_display(dev);
@@ -548,6 +585,7 @@ static DEVICE_API(display, st7789v_api) = {
 	.blanking_on = st7789v_blanking_on,
 	.blanking_off = st7789v_blanking_off,
 	.write = st7789v_write,
+	.set_brightness = st7789v_set_backlight,
 	.get_capabilities = st7789v_get_capabilities,
 	.set_pixel_format = st7789v_set_pixel_format,
 	.set_orientation = st7789v_set_orientation,
@@ -559,6 +597,7 @@ static DEVICE_API(display, st7789v_api) = {
 		.dc_gpio = GPIO_DT_SPEC_INST_GET(inst, dc_gpios),			\
 		.rst_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, reset_gpios, {0}),		\
 		.bl_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, bl_gpios, {0}),		\
+		.bl_pwm = PWM_DT_SPEC_INST_GET_OR(inst, {0}),		\
 		.vcom = DT_INST_PROP(inst, vcom),					\
 		.gctrl = DT_INST_PROP(inst, gctrl),					\
 		.vdv_vrh_enable = (DT_INST_NODE_HAS_PROP(inst, vrhs)			\

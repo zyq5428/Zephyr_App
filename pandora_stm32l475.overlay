@@ -11,10 +11,9 @@
 	aliases {
 		led0 = &red_led;
 		led1 = &green_led;
-		pwm-led0 = &backlight_pwm_led;
-		// lcd-backlight = &backlight_led;
+		// pwm-led0 = &backlight_pwm_led;
 		ap3216c-i2c = &ap3216c;
-	};
+	}; 
 
 	leds {
 		compatible = "gpio-leds";
@@ -37,26 +36,22 @@
 		blue_led: led_2 {
 			gpios = <&gpioe 9 GPIO_ACTIVE_LOW>;
 		};
-
-		// backlight_led: led_3 {
-		// 	gpios = <&gpioc 4 GPIO_ACTIVE_HIGH>;
-		// };
 	};
 	/* 定义 PWM LED 节点 */
-	pwmleds: pwmleds {
-		compatible = "pwm-leds";
-		status = "okay";
-		/* * 定义名为 test_pwm_led 的节点
-		 * <&pwm4   : 使用 TIM4 定时器
-		 * 4       : 使用第 4 通道 (对应 PD15)
-		 * PWM_MSEC(20) : PWM 周期 20ms (50Hz)，适合 LED 调光
-		 * 100000 : 10KHz 对应周期 100,000 ns, 适用于无极级调光背光
-		 * PWM_POLARITY_NORMAL> : 正常极性 (高电平有效/点亮)
-		 */
-		backlight_pwm_led: backlight_pwm_led {
-			pwms = <&pwm4 4 100000 PWM_POLARITY_NORMAL>;
-		};
-	};
+	// pwmleds: pwmleds {
+	// 	compatible = "pwm-leds";
+	// 	status = "okay";
+	// 	/* * 定义名为 test_pwm_led 的节点
+	// 	 * <&pwm4   : 使用 TIM4 定时器
+	// 	 * 4       : 使用第 4 通道 (对应 PD15)
+	// 	 * PWM_MSEC(20) : PWM 周期 20ms (50Hz)，适合 LED 调光
+	// 	 * 100000 : 10KHz 对应周期 100,000 ns, 适用于无极级调光背光
+	// 	 * PWM_POLARITY_NORMAL> : 正常极性 (高电平有效/点亮)
+	// 	 */
+	// 	backlight_pwm_led: backlight_pwm_led {
+	// 		pwms = <&pwm4 4 100000 PWM_POLARITY_NORMAL>;
+	// 	};
+	// };
 };
 
 &dma1 {
@@ -134,7 +129,7 @@ dmauart: &usart1 {
 - RES       PB10
 - DC        PB11
 - CS        PB12
-- BLK       PC4
+- BLK       PD15 (PWM控制背光)
 */
 &spi2 {
 	pinctrl-0 = <&spi2_nss_pb12 &spi2_sck_pb13 &spi2_mosi_pb15>;
@@ -173,7 +168,14 @@ dmauart: &usart1 {
 		/* * 背光控制引脚 (Backlight)
 		* 对应物理引脚 PC4，高电平点亮 (GPIO_ACTIVE_HIGH)
 		*/
-		bl-gpios = <&gpioc 4 GPIO_ACTIVE_HIGH>; 
+		// bl-gpios = <&gpioc 4 GPIO_ACTIVE_HIGH>; 
+
+		/* * 背光控制引脚 (Backlight-pwm)
+		* 对应物理引脚 PD15，高电平点亮 (GPIO_ACTIVE_HIGH)
+		* 100000 : 10KHz 对应周期 100,000 ns, 适用于无极级调光背光
+		* PWM_POLARITY_NORMAL> : 正常极性 (高电平有效/点亮)
+		*/
+		pwms = <&pwm4 4 100000 PWM_POLARITY_NORMAL>;
 
 		/* ========= 屏幕物理参数 ========= */
 

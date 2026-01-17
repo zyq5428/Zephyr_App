@@ -25,6 +25,12 @@ properties:
     required: false
     description: 背光控制引脚 (Backlight)
 
+  # 官方推荐属性名
+  pwms:
+    type: phandle-array
+    required: false
+    description: "用于背光控制的 PWM 信号"
+
   # 屏幕参数定义
   width:
     type: int
