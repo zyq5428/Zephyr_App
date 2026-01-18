@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+ #define DT_DRV_COMPAT custom_sh1106
+
 // 包含 Zephyr 日志系统的头文件
 #include <zephyr/logging/log.h>
 // 注册当前驱动模块的日志名称和日志级别。
@@ -29,6 +31,11 @@ LOG_MODULE_REGISTER(ssd1306, LOG_LEVEL_INF);
 
 // 包含自定义的 SSD1306 芯片命令宏定义文件
 #include "ssd1306_regs.h"
+
+/* 
+ * 只有当设备树中有任何一个 status="okay" 的 sh1106 节点时，才编译下面的内容
+ */
+#if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
 
 #define CUSTOM_SSD1306 1 // 定义一个宏，表示使用自定义的 SSD1306 驱动
 #define SSD1306_ADDRESSING_MODE 0x20 // 寻址模式模式模式0x20为水平寻址模式，0x10为页寻址模式，0x00为列寻址模式
@@ -647,3 +654,5 @@ static const struct display_driver_api ssd1306_driver_api = {
 // DT_FOREACH_STATUS_OKAY(solomon_ssd1306fb, SSD1306_DEFINE)
 // 提示：如果你使用的是自定义的 "custom,sh1106"，你需要在项目本地的宏中添加一行
 DT_FOREACH_STATUS_OKAY(custom_sh1106, SSD1306_DEFINE)
+
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */

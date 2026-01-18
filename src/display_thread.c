@@ -59,7 +59,10 @@ static void ui_timer_cb(lv_timer_t * t) {
     display_set_brightness(dev, display_val); 
 }
 
-void display_thread_entry(void) {
+void display_thread_entry(void) 
+{
+    LOG_INF("Display Thread started");
+    
     if (!device_is_ready(dev)) {
         LOG_ERR("Display device not ready");
         return;
