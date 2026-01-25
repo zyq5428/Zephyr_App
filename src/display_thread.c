@@ -1,6 +1,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/pwm.h>
 #include <lvgl.h>
 #include <stdio.h>
 #include <zephyr/logging/log.h>
@@ -9,6 +11,86 @@ LOG_MODULE_REGISTER(Display_TASK, LOG_LEVEL_INF);
 
 /* 获取显示设备句柄 */
 static const struct device *dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
+
+/**
+ * 编译时检测设备树：
+ * 我们检查设备树里是否有定义别名为 'pwm_backlight' 或 'gpio_backlight' 的节点。
+ */
+#define HAS_PWM_BL  DT_NODE_HAS_STATUS(DT_ALIAS(pwm_backlight), okay)
+#define HAS_GPIO_BL DT_NODE_HAS_STATUS(DT_ALIAS(gpio_backlight), okay)
+
+/* 根据检测结果，定义硬件结构体。如果设备树里没写，这些代码根本不会进入编译器 */
+#if HAS_PWM_BL
+static const struct pwm_dt_spec bl_pwm = PWM_DT_SPEC_GET(DT_ALIAS(pwm_backlight));
+#endif
+
+#if HAS_GPIO_BL
+static const struct gpio_dt_spec bl_gpio = GPIO_DT_SPEC_GET(DT_ALIAS(gpio_backlight), gpios);
+#endif
+
+/**
+ * @brief 设置背光状态
+ * @param brightness 亮度值 (0-255)
+ */
+static int backlight_set(uint8_t brightness)
+{
+    /* --- 优先级 1：PWM 控制 --- */
+#if HAS_PWM_BL
+    /* 只要设备树里有 PWM 节点，就进入这段逻辑 */
+    if (pwm_is_ready_dt(&bl_pwm)) {
+        // 将亮度映射到 PWM 脉宽：(周期 * 亮度) / 255
+        uint32_t pulse = (bl_pwm.period * brightness) / 255;
+        // 设置 PWM 频率和脉宽
+        return pwm_set_dt(&bl_pwm, bl_pwm.period, pulse);
+    }
+#endif
+
+    /* --- 优先级 2：GPIO 控制 --- */
+#if HAS_GPIO_BL
+    /* 如果 PWM 没被编译，或者硬件初始化失败，则尝试编译并使用 GPIO */
+    if (gpio_is_ready_dt(&bl_gpio)) {
+        // 亮度大于 0 就点亮，等于 0 就熄灭
+        return gpio_pin_set_dt(&bl_gpio, brightness > 0 ? 1 : 0);
+    }
+#endif
+
+    /* --- 优先级 3：无配置 --- */
+    return -ENOTSUP; 
+}
+
+/**
+ * @brief 初始化函数 (同样需要根据模式进行初始化)
+ */
+int backlight_init(void)
+{
+    int ret = -ENODEV;
+
+#if HAS_PWM_BL
+    // 检查 PWM 是否可用
+    if (device_is_ready(bl_pwm.dev)) {
+        // 只有底层控制器真正 READY 了，才算成功
+        if (pwm_is_ready_dt(&bl_pwm)) {
+            LOG_INF("Backlight: 使用 PWM 模式 (%s)\n", bl_pwm.dev->name);
+            return 0; 
+        }
+    }
+    LOG_ERR("Backlight: PWM 别名存在但设备未就绪，尝试降级...\n");
+#endif
+
+#if HAS_GPIO_BL
+    // 如果 PWM 不可用，尝试初始化 GPIO
+    if (gpio_is_ready_dt(&bl_gpio)) {
+        ret = gpio_pin_configure_dt(&bl_gpio, GPIO_OUTPUT_INACTIVE);
+        if (ret == 0) {
+            LOG_INF("Backlight: 使用 GPIO 模式\n");
+            return 0;
+        }
+    }
+#endif
+
+    LOG_ERR("Backlight: 所有模式均初始化失败 (-19)");
+    return ret;
+}
 
 /* --- UI 句柄 --- */
 static lv_obj_t * main_arc;
@@ -64,7 +146,26 @@ void display_thread_entry(void)
     LOG_INF("Display Thread started");
     
     if (!device_is_ready(dev)) {
-        LOG_ERR("Display device not ready");
+        LOG_ERR("Display device %s not ready!", dev->name);
+        return;
+    }
+
+    // display_blanking_off 会调用驱动中的回调，确保 0x29 被发出
+    LOG_INF("Turning on display blanking (Sending 0x29)...");
+    display_blanking_off(dev);
+    // 确保从 Sleep Out (0x11) 到后续操作之间有足够的硬件稳定时间
+    k_msleep(120);
+
+    /* 初始化背光控制 */
+    int ret = backlight_init();
+    if (ret < 0) {
+        LOG_ERR("Backlight init failed (%d)", ret);
+        return;
+    }
+    /* 设置初始背光亮度为 100% */
+    ret = backlight_set(255);
+    if (ret < 0) {
+        LOG_ERR("Backlight set failed (%d)", ret);
         return;
     }
 

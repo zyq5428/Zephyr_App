@@ -24,6 +24,11 @@
 
 LOG_MODULE_REGISTER(st7789_direct, LOG_LEVEL_INF);
 
+/* 
+ * 只有当设备树中有任何一个 status="okay" 的 custom_st7789v 节点时，才编译下面的内容
+ */
+#if DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT)
+
 #define CONFIG_ST7789V_RGB565
 
 struct st7789v_config {
@@ -634,3 +639,5 @@ static DEVICE_API(display, st7789v_api) = {
 			&st7789v_api);
 
 DT_INST_FOREACH_STATUS_OKAY(ST7789V_INIT)
+
+#endif /* DT_HAS_COMPAT_STATUS_OKAY(DT_DRV_COMPAT) */
