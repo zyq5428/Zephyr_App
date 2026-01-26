@@ -13,7 +13,8 @@
 		led1 = &green_led;
 		pwm-led0 = &pwm_led;
 		ap3216c-i2c = &ap3216c;
-		pwm-backlight = &pwm_bl;
+		// pwm-backlight = &pwm_bl;
+		gpio-backlight = &gpio_bl;
 	}; 
 
 	leds {
@@ -36,6 +37,9 @@
 
 		blue_led: led_2 {
 			gpios = <&gpioe 9 GPIO_ACTIVE_LOW>;
+		};
+		gpio_bl: led_3 {
+			gpios = <&gpiob 7 GPIO_ACTIVE_HIGH>;
 		};
 	};
 	/* 定义 PWM LED 节点 */
@@ -65,15 +69,15 @@
 
 	mipi-dbi-spi {
 		compatible = "zephyr,mipi-dbi-spi";
-		spi-dev = <&spi2>;
+		spi-dev = <&spi3>;
 		/* * 数据/命令选择引脚 (Data/Command)
 		* 对应物理引脚 PB11，高电平有效 (GPIO_ACTIVE_HIGH)
 		*/
-		dc-gpios = <&gpiob 11 GPIO_ACTIVE_HIGH>;
+		dc-gpios = <&gpiob 4 GPIO_ACTIVE_HIGH>;
 		/* * 复位引脚 (Reset)
 		* 对应物理引脚 PB10，低电平有效 (GPIO_ACTIVE_LOW)，拉低复位
 		*/
-		reset-gpios = <&gpiob 10 GPIO_ACTIVE_LOW>;
+		reset-gpios = <&gpiob 6 GPIO_ACTIVE_LOW>;
 		write-only;
 		status = "okay";
 		#address-cells = <1>;
@@ -97,13 +101,13 @@
 			/* 屏幕宽度：240 像素 */
 			width = <240>;
 			/* 屏幕高度：280 像素 */
-			height = <280>;
+			height = <240>;
 			/* * X 轴偏移量
 			* ST7789 驱动芯片支持的分辨率往往比实际屏幕大，需要设置偏移量来对齐图像
 			*/
 			x-offset = <0>;
 			/* Y 轴偏移量：20 像素 */
-			y-offset = <20>;
+			y-offset = <0>;
 
 			/* ========= 寄存器初始化参数 (对应 st7789v.h) ========= */
 
@@ -112,19 +116,19 @@
 			* 作用: 设置 VCOM 电压，控制屏幕对比度和闪烁
 			* 当前值: 0x3F (十进制 63)
 			*/
-			vcom = <0x3F>;
+			vcom = <0x19>;
 			/* * 栅极控制 (Gate Control)
 			* 对应头文件命令: ST7789V_CMD_GCTRL (0xB7)
 			* 作用: 设置栅极电压输出电平 (VGH/VGL)
 			* 当前值: 0x05 (具体电压需查阅数据手册电气特性表)
 			*/
-			gctrl = <0x05>;
+			gctrl = <0x35>;
 			/* * VRH 设置 (VRH Setting)
 			* 对应头文件命令: ST7789V_CMD_VRH (0xC3)
 			* 作用: VRH 电压设置，影响显示屏的伽马电压幅度
 			* 当前值: 0x0F
 			*/
-			vrhs = <0x0F>;
+			vrhs = <0x12>;
 			/* * VDV 设置 (VDV Setting)
 			* 对应头文件命令: ST7789V_CMD_VDS (0xC4)
 			* 作用: VDV 电压设置，与 VRH 配合调节
@@ -152,7 +156,7 @@
 			* 解析: 对应 ST7789V_COLMOD_FMT_16bit (5)
 			* 含义: 使用 16位颜色 (RGB565)
 			*/
-			colmod = <0x05>;
+			colmod = <0x65>;
 			/* * LCM 控制 (LCM Control)
 			* 对应头文件命令: ST7789V_CMD_LCMCTRL (0xC0)
 			* 作用: 某些特定面板的设置
@@ -184,13 +188,13 @@
 			* 作用: 调整红色/高亮部分的灰度表现
 			* 参数: 14个字节的校准数据
 			*/
-			pvgam-param = [D0 05 09 09 08 14 28 33 3F 07 13 14 28 30];
+			pvgam-param = [d0 04 0d 11 13 2b 3f 54 4c 18 0d 0b 1f 23];
 			/* * 负极性伽马校正 (Negative Gamma Control)
 			* 对应头文件命令: ST7789V_CMD_NVGAMCTRL (0xE1)
 			* 作用: 调整暗部/黑色的灰度表现
 			* 参数: 14个字节的校准数据
 			*/
-			nvgam-param = [D0 05 09 09 08 03 24 32 32 3B 14 13 28 2F];
+			nvgam-param = [d0 04 0c 11 13 2c 3f 44 51 2f 1f 1f 20 23];
 			/* * RAM 控制 (RAM Control)
 			* 对应头文件命令: ST7789V_CMD_RAMCTRL (0xB0)
 			* 作用: 设置接口类型和访问方式
@@ -203,7 +207,7 @@
 			* 参数: [CD 08 14]
 			*/
 			rgb-param = [CD 08 14];
-			// inversion-off; // 这是一个被注释掉的布尔属性，对应 ST7789V_CMD_INV_OFF (0x20)
+			// inversion-off;
 		};
 	};
 };
@@ -302,11 +306,28 @@ dmauart: &usart1 {
 - BLK       PD15 (PWM控制背光)
 */
 &spi2 {
-	pinctrl-0 = <&spi2_nss_pb12 &spi2_sck_pb13 &spi2_mosi_pb15>;
+	// pinctrl-0 = <&spi2_nss_pb12 &spi2_sck_pb13 &spi2_mosi_pb15>;
+	pinctrl-0 = <&spi2_sck_pb13 &spi2_mosi_pb15>;
 	pinctrl-names = "default";
 	status = "okay";
 	dmas = 	<&dma1 5 1 STM32_DMA_PERIPH_TX>;
 	dma-names = "tx";
-	// cs-gpios = <&gpiod 12 GPIO_ACTIVE_LOW>;
+	cs-gpios = <&gpiob 12 GPIO_ACTIVE_LOW>;
 };
 
+/* SPI3配置 - LCD使用PB3(SCK)和PB5(MOSI)
+- SPI3_CLK  PB3
+- SPI3_MOSI PB5
+- RES       PB6
+- DC        PB4
+- CS        PD7
+- BLK       PB7 (GPIO控制背光,TIM4_CH2 PWM控制)
+*/
+&spi3 {
+	pinctrl-0 = <&spi3_sck_pb3 &spi3_mosi_pb5>;
+	pinctrl-names = "default";
+	status = "okay";
+	// dmas = 	<&dma1 5 1 STM32_DMA_PERIPH_TX>;
+	// dma-names = "tx";
+	cs-gpios = <&gpiod 7 GPIO_ACTIVE_LOW>;
+};

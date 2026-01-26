@@ -174,8 +174,8 @@ void display_thread_entry(void)
 
     /* --- 2. 创建圆环进度条 (Arc) --- */
     main_arc = lv_arc_create(lv_scr_act());
-    // 尺寸 180x180，留出空间避开 240 宽度的圆角边缘
-    lv_obj_set_size(main_arc, 180, 180);
+    // 尺寸 160x160，留出空间避开 240 宽度的圆角边缘
+    lv_obj_set_size(main_arc, 160, 160);
     lv_obj_align(main_arc, LV_ALIGN_CENTER, 0, -35); 
     /* --- 设置圆环开口方向 --- */
     // 135度(左下) 到 45度(右下)，顺时针经过顶部，底部留出 90 度缺口
@@ -204,8 +204,8 @@ void display_thread_entry(void)
     /* --- 4. 底部实时平滑波形 (Chart) --- */
     main_chart = lv_chart_create(lv_scr_act());
     // 宽度 160，高度 60，向上偏移避开底部圆角
-    lv_obj_set_size(main_chart, 160, 65);
-    lv_obj_align(main_chart, LV_ALIGN_BOTTOM_MID, 0, -45); 
+    lv_obj_set_size(main_chart, 160, 60);
+    lv_obj_align(main_chart, LV_ALIGN_BOTTOM_MID, 0, -35); 
     lv_chart_set_type(main_chart, LV_CHART_TYPE_LINE);
     // 设置图表纵轴的取值范围为 0 到 255, LVGL v8/v9 的语法：设置主 Y 轴范围
     lv_chart_set_range(main_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 255);
