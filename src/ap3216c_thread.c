@@ -18,7 +18,7 @@ static const struct i2c_dt_spec ap3216c_i2c_spec = I2C_DT_SPEC_GET(DT_ALIAS(ap32
 
 // --- 新增：全局变量，用于存储最新的光感值 ---
 // 使用 volatile 关键字告诉编译器该变量可能在程序流程之外被修改
-// volatile uint16_t g_als_raw_value = 0;
+volatile uint16_t g_als_raw_value = 0;
 
 // 定义消息队列 ---
 // 每一个数据包大小为 uint16_t，队列长度为 5
@@ -90,7 +90,7 @@ void ap3216c_thread_entry(void *p1, void *p2, void *p3)
         if (ret == 0) {
             // g_als_raw_value = als_value;
             // K_NO_WAIT 表示如果队列满了，不等待直接跳过
-            // k_msgq_put(&als_msgq, &als_value, K_NO_WAIT);
+            k_msgq_put(&als_msgq, &als_value, K_NO_WAIT);
             LOG_DBG("ALS Data: %u raw", als_value);
         } else {
             LOG_WRN("Failed to read ALS data: %d", ret);

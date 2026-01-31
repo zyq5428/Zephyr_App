@@ -13,8 +13,8 @@
 		led1 = &green_led;
 		pwm-led0 = &pwm_led;
 		ap3216c-i2c = &ap3216c;
-		// pwm-backlight = &pwm_bl;
-		gpio-backlight = &gpio_bl;
+		pwm-backlight = &pwm_bl;
+		// gpio-backlight = &gpio_bl;
 	}; 
 
 	leds {
@@ -38,9 +38,9 @@
 		blue_led: led_2 {
 			gpios = <&gpioe 9 GPIO_ACTIVE_LOW>;
 		};
-		gpio_bl: led_3 {
-			gpios = <&gpiob 7 GPIO_ACTIVE_HIGH>;
-		};
+		// gpio_bl: led_3 {
+		// 	gpios = <&gpiob 7 GPIO_ACTIVE_HIGH>;
+		// };
 	};
 	/* 定义 PWM LED 节点 */
 	pwmleds: pwmleds {
@@ -63,7 +63,8 @@
 			* 100000 : 10KHz 对应周期 100,000 ns, 适用于无极级调光背光
 			* PWM_POLARITY_NORMAL> : 正常极性 (高电平有效/点亮)
 			*/
-			pwms = <&pwm4 4 100000 PWM_POLARITY_NORMAL>;
+			// pwms = <&pwm4 4 100000 PWM_POLARITY_NORMAL>;
+			pwms = <&pwm4 2 100000 PWM_POLARITY_NORMAL>;
 		};
 	};
 
@@ -250,7 +251,7 @@ dmauart: &usart1 {
 	pwm4: pwm {
 		status = "okay";
 		/* 引用上面定义的 pinctrl */
-		pinctrl-0 = <&tim4_ch4_pd15>;
+		pinctrl-0 = <&tim4_ch2_pb7 &tim4_ch4_pd15>;
 		pinctrl-names = "default";
 		label = "timers4_pwm";
 	};

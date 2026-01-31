@@ -28,6 +28,9 @@ static const struct pwm_dt_spec bl_pwm = PWM_DT_SPEC_GET(DT_ALIAS(pwm_backlight)
 static const struct gpio_dt_spec bl_gpio = GPIO_DT_SPEC_GET(DT_ALIAS(gpio_backlight), gpios);
 #endif
 
+// --- 引用外部定义的消息队列 ---
+extern struct k_msgq als_msgq;
+
 /**
  * @brief 设置背光状态
  * @param brightness 亮度值 (0-255)
@@ -103,42 +106,31 @@ static lv_chart_series_t * main_ser;
  */
 static void ui_timer_cb(lv_timer_t * t) {
     // static 变量在函数调用结束后不会被销毁，会保留上次的值
-    static int angle = 0; 
+    static uint16_t als_value = 0;
     
-    // 每次回调增加步进值，增加越快，数值波动越快
-    angle += 2; 
-    
-    /* * 目标：产生一个 0 到 255 再回到 0 的往复数值
-     * 1. 我们取模 510 (即 255 * 2)，这样 display_val 的范围会在 0 到 509 之间循环
-     */
-    int display_val = (angle % 510);
-
-    /* * 2. 折返逻辑处理：
-     * 如果数值在 0-255 之间，直接使用；
-     * 如果数值在 256-509 之间，我们需要让它“往回走”。
-     * 例如：当 display_val 是 256 时，我们希望得到 254 (即 510 - 256)
-     */
-    if(display_val > 255) {
-        display_val = 510 - display_val;
+    // 尝试从队列中读取数据
+    // K_NO_WAIT 表示如果没有新消息，立刻返回，不阻塞 LVGL 渲染
+    uint16_t temp_val;
+    if (k_msgq_get(&als_msgq, &temp_val, K_NO_WAIT) == 0) {
+        als_value = temp_val; // 只有拿到新消息才更新
     }
-
     // --- 更新 UI 控件 ---
 
-    // 更新圆环的值 (确保你的 main_arc 范围也设置成了 0-255)
-    lv_arc_set_value(main_arc, display_val);
+    // 更新圆环的值
+    lv_arc_set_value(main_arc, als_value);
 
     // 更新文本标签显示百分比或数值
     char buf[16];
     // 这里如果依然想显示百分比，需要计算：(val / 255.0) * 100
     // 如果直接显示原始值，使用下面的代码：
-    snprintf(buf, sizeof(buf), "%d", display_val);
+    snprintf(buf, sizeof(buf), "%d", als_value);
     lv_label_set_text(val_label, buf);
 
     // 将数据推入波形图 (Chart 控件会自动根据设置的 Range 绘制)
-    lv_chart_set_next_value(main_chart, main_ser, display_val);
-
+    lv_chart_set_next_value(main_chart, main_ser, als_value);
     // 动态调节硬件亮度 (通常 PWM 亮度范围就是 0-255)
-    display_set_brightness(dev, display_val); 
+    // display_set_brightness(dev, display_val); 
+    backlight_set(als_value);
 }
 
 void display_thread_entry(void) 
