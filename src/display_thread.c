@@ -227,7 +227,7 @@ void display_thread_entry(void)
 
 /* --- 线程定义 --- */
 #define DISPLAY_STACK_SIZE 8192
-#define DISPLAY_PRIORITY 5
+#define DISPLAY_PRIORITY 10
 K_THREAD_DEFINE(display_thread_tid, DISPLAY_STACK_SIZE, 
                 display_thread_entry, NULL, NULL, NULL,
                 DISPLAY_PRIORITY, 0, 0);

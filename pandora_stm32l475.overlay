@@ -12,7 +12,8 @@
 		led0 = &red_led;
 		led1 = &green_led;
 		pwm-led0 = &pwm_led;
-		ap3216c-i2c = &ap3216c;
+		ap3216c-sensor = &ap3216c_node;
+        aht10-sensor = &aht10_node;
 		pwm-backlight = &pwm_bl;
 		// gpio-backlight = &gpio_bl;
 	}; 
@@ -42,6 +43,7 @@
 		// 	gpios = <&gpiob 7 GPIO_ACTIVE_HIGH>;
 		// };
 	};
+
 	/* 定义 PWM LED 节点 */
 	pwmleds: pwmleds {
 		compatible = "pwm-leds";
@@ -67,6 +69,46 @@
 			pwms = <&pwm4 2 100000 PWM_POLARITY_NORMAL>;
 		};
 	};
+
+	/* 模拟 I2C 控制器必须放在根节点下 */
+    /* 这里的名字可以叫 gpio-i2c_0，但 compatible 必须固定 */
+    gpio_i2c0: gpio_i2c0 {
+        compatible = "gpio-i2c";
+        status = "okay";  /* 激活该节点 */
+
+        /* SDA 对应 PC1, SCL 对应 PC0 */
+        /* 这里的 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN) 是标准要求 */
+        sda-gpios = <&gpioc 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+        scl-gpios = <&gpioc 0 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+        
+        clock-frequency = <I2C_BITRATE_STANDARD>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        /* 2. 传感器作为子节点挂载 */
+        ap3216c_node: ap3216c@1e {
+            compatible = "i2c-device"; /* 通用 I2C 设备驱动 */
+            reg = <0x1e>;              /* 传感器地址 */
+            status = "okay";
+        };
+    };
+
+    /* 定义第2个模拟 I2C 总线，连接 AHT10 */
+    gpio_i2c1: gpio_i2c1 {
+        compatible = "gpio-i2c";
+        status = "okay";
+        sda-gpios = <&gpioc 1 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+        scl-gpios = <&gpiod 6 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+        clock-frequency = <I2C_BITRATE_STANDARD>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        aht10_node: aht10@38 {
+            compatible = "i2c-device";
+            reg = <0x38>;
+            status = "okay";
+        };
+    };
 
 	mipi-dbi-spi {
 		compatible = "zephyr,mipi-dbi-spi";
@@ -285,18 +327,18 @@ dmauart: &usart1 {
 	};
 };
 
-&i2c3 {
-	status = "okay";
-    pinctrl-0 = <&i2c3_scl_pc0 &i2c3_sda_pc1>; // 确认PC0/PC1引脚 i2c3_scl_pc0,i2c3_sda_pc1
-	pinctrl-names = "default";
-    clock-frequency = <I2C_BITRATE_STANDARD>;
-	// AP3216C 节点
-    ap3216c: ap3216c@1e {
-        compatible = "liteon,ap3216c"; // 兼容性字符串可以自定义
-        reg = <0x1e>;               // 传感器I2C设备地址 (0x1E)
-        status = "okay";
-    };
-};
+// &i2c3 {
+// 	status = "okay";
+//     pinctrl-0 = <&i2c3_scl_pc0 &i2c3_sda_pc1>; // 确认PC0/PC1引脚 i2c3_scl_pc0,i2c3_sda_pc1
+// 	pinctrl-names = "default";
+//     clock-frequency = <I2C_BITRATE_STANDARD>;
+// 	// AP3216C 节点
+//     ap3216c: ap3216c@1e {
+//         compatible = "liteon,ap3216c"; // 兼容性字符串可以自定义
+//         reg = <0x1e>;               // 传感器I2C设备地址 (0x1E)
+//         status = "okay";
+//     };
+// };
 
 /* SPI2配置 - LCD使用PB13(SCK)和PB15(MOSI)
 - SPI2_CLK  PB13

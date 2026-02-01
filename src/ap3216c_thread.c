@@ -4,6 +4,7 @@
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/logging/log.h>
 #include <errno.h> // 引入标准错误码
@@ -13,12 +14,12 @@
 LOG_MODULE_REGISTER(AP3216C_TASK, LOG_LEVEL_INF);
 
 // 通过设备树别名获取I2C设备的规范结构
-// 别名 ap3216c-i2c 必须在 dts.overlay 中定义
-static const struct i2c_dt_spec ap3216c_i2c_spec = I2C_DT_SPEC_GET(DT_ALIAS(ap3216c_i2c));
+// 这里的 ap3216c_node 对应上面 overlay 里的标签
+static const struct i2c_dt_spec ap3216c_i2c_spec = I2C_DT_SPEC_GET(DT_NODELABEL(ap3216c_node));
 
 // --- 新增：全局变量，用于存储最新的光感值 ---
 // 使用 volatile 关键字告诉编译器该变量可能在程序流程之外被修改
-volatile uint16_t g_als_raw_value = 0;
+// volatile uint16_t g_als_raw_value = 0;
 
 // 定义消息队列 ---
 // 每一个数据包大小为 uint16_t，队列长度为 5

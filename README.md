@@ -95,3 +95,13 @@ kernel thread analyzer
 - DC        PB11
 - CS        PB12
 - BLK       PB14
+
+## AHT10引脚配置(软件I2C)
+
+- IIC_CLK   PD6
+- IIC_SDA   PC1
+
+## AP3216C引脚配置(I2C3)
+
+- IIC_CLK   PC0
+- IIC_SDA   PC1

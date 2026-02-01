@@ -35,8 +35,10 @@ target_sources(app PRIVATE
     src/main.c
     src/led_thread.c
     src/ap3216c_thread.c
+    src/aht10_thread.c
     src/display_thread.c
     drivers/ap3216c_drv.c
+    drivers/aht10_drv.c
     drivers/ssd1306_drv.c
     drivers/st7789v_drv.c
 )

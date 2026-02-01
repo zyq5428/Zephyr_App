@@ -8,9 +8,9 @@
 LOG_MODULE_REGISTER(LED_TASK, LOG_LEVEL_INF);
 
 /* ---------------- 配置参数 ---------------- */
-#define TOTAL_STEPS         200    // 1分钟内总共调整200次
-#define TOTAL_TIME_MS       30000  // 1分钟 = 60000 毫秒
-#define STEP_DELAY_MS       (TOTAL_TIME_MS / TOTAL_STEPS) // 每次调整间隔 150ms
+#define TOTAL_STEPS         10    // 1秒内总共调整10次
+#define TOTAL_TIME_MS       1000  // 1000 毫秒
+#define STEP_DELAY_MS       (TOTAL_TIME_MS / TOTAL_STEPS) // 每次调整间隔 100ms
 
 /* GPIO_DT_SPEC_GET(node_id, property)： 这是Zephyr提供的另一个宏，
 * 用于从指定的设备节点ID (LED1_NODE) 中提取名为 property 的属性值，
@@ -55,13 +55,13 @@ void led_thread_entry(void *p1, void *p2, void *p3)
 
     while (1) {
 		/* --- 1. 计算亮度 (0-100-0) --- */
-        // step_count 从 0 增加到 199
-        if (step_count < 100) {
-            // 前 100 次：从 0% 增加到 99%
-            brightness_percent = step_count;
+        // step_count 从 0 增加到 19
+        if (step_count < 5) {
+            // 前 10 次：从 0% 增加到 90%
+            brightness_percent = step_count * 10;
         } else {
-            // 后 100 次：从 100% 减少到 1%
-            brightness_percent = 200 - step_count;
+            // 后 10 次：从 100% 减少到 1%
+            brightness_percent = 100 - step_count * 10;
         }
 
         /* --- 2. 设置 PWM 亮度 --- */
@@ -77,7 +77,7 @@ void led_thread_entry(void *p1, void *p2, void *p3)
 		}
 
 		/* --- 3. 每 1 分钟切换一次 GPIO LED 状态 --- */
-        // 每 200 次步进（即一分钟）翻转一次
+        // 每 20 次步进（即一秒钟）翻转一次
         if (step_count == 0) {
             gpio_pin_toggle_dt(&led);
             LOG_DBG("GPIO LED Toggled, Restarting PWM Cycle");
@@ -96,7 +96,7 @@ void led_thread_entry(void *p1, void *p2, void *p3)
 
 // 线程栈和定义
 #define LED_STACK_SIZE 512
-#define LED_PRIORITY 10
+#define LED_PRIORITY 15
 
 K_THREAD_DEFINE(led_tid, LED_STACK_SIZE, 
                 led_thread_entry, NULL, NULL, NULL,
