@@ -1,3 +1,8 @@
+/*
+ * application/src/display_thread.c
+ * 显示与UI交互线程 - Pandora Dashboard (Fixed Layout & Value Update)
+ */
+
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/display.h>
@@ -7,19 +12,20 @@
 #include <stdio.h>
 #include <zephyr/logging/log.h>
 
+/* 引入传感器头文件 */
+#include "aht10.h" 
+
 LOG_MODULE_REGISTER(Display_TASK, LOG_LEVEL_INF);
 
-/* 获取显示设备句柄 */
+/* -------------------------------------------------------------------------- */
+/* 硬件抽象层 (HAL) - 背光控制                              */
+/* -------------------------------------------------------------------------- */
+
 static const struct device *dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 
-/**
- * 编译时检测设备树：
- * 我们检查设备树里是否有定义别名为 'pwm_backlight' 或 'gpio_backlight' 的节点。
- */
 #define HAS_PWM_BL  DT_NODE_HAS_STATUS(DT_ALIAS(pwm_backlight), okay)
 #define HAS_GPIO_BL DT_NODE_HAS_STATUS(DT_ALIAS(gpio_backlight), okay)
 
-/* 根据检测结果，定义硬件结构体。如果设备树里没写，这些代码根本不会进入编译器 */
 #if HAS_PWM_BL
 static const struct pwm_dt_spec bl_pwm = PWM_DT_SPEC_GET(DT_ALIAS(pwm_backlight));
 #endif
@@ -28,109 +34,203 @@ static const struct pwm_dt_spec bl_pwm = PWM_DT_SPEC_GET(DT_ALIAS(pwm_backlight)
 static const struct gpio_dt_spec bl_gpio = GPIO_DT_SPEC_GET(DT_ALIAS(gpio_backlight), gpios);
 #endif
 
-// --- 引用外部定义的消息队列 ---
-extern struct k_msgq als_msgq;
+extern struct k_msgq als_msgq; 
+extern struct k_msgq aht10_msgq; 
 
-/**
- * @brief 设置背光状态
- * @param brightness 亮度值 (0-255)
- */
+/* 设置背光亮度 */
 static int backlight_set(uint8_t brightness)
 {
-    /* --- 优先级 1：PWM 控制 --- */
 #if HAS_PWM_BL
-    /* 只要设备树里有 PWM 节点，就进入这段逻辑 */
     if (pwm_is_ready_dt(&bl_pwm)) {
-        // 将亮度映射到 PWM 脉宽：(周期 * 亮度) / 255
         uint32_t pulse = (bl_pwm.period * brightness) / 255;
-        // 设置 PWM 频率和脉宽
         return pwm_set_dt(&bl_pwm, bl_pwm.period, pulse);
     }
 #endif
 
-    /* --- 优先级 2：GPIO 控制 --- */
 #if HAS_GPIO_BL
-    /* 如果 PWM 没被编译，或者硬件初始化失败，则尝试编译并使用 GPIO */
     if (gpio_is_ready_dt(&bl_gpio)) {
-        // 亮度大于 0 就点亮，等于 0 就熄灭
         return gpio_pin_set_dt(&bl_gpio, brightness > 0 ? 1 : 0);
     }
 #endif
-
-    /* --- 优先级 3：无配置 --- */
     return -ENOTSUP; 
 }
 
-/**
- * @brief 初始化函数 (同样需要根据模式进行初始化)
- */
+/* 初始化背光 */
 int backlight_init(void)
 {
     int ret = -ENODEV;
-
 #if HAS_PWM_BL
-    // 检查 PWM 是否可用
     if (device_is_ready(bl_pwm.dev)) {
-        // 只有底层控制器真正 READY 了，才算成功
         if (pwm_is_ready_dt(&bl_pwm)) {
-            LOG_INF("Backlight: 使用 PWM 模式 (%s)\n", bl_pwm.dev->name);
+            LOG_INF("Backlight: PWM Mode Ready");
             return 0; 
         }
     }
-    LOG_ERR("Backlight: PWM 别名存在但设备未就绪，尝试降级...\n");
 #endif
-
 #if HAS_GPIO_BL
-    // 如果 PWM 不可用，尝试初始化 GPIO
     if (gpio_is_ready_dt(&bl_gpio)) {
         ret = gpio_pin_configure_dt(&bl_gpio, GPIO_OUTPUT_INACTIVE);
-        if (ret == 0) {
-            LOG_INF("Backlight: 使用 GPIO 模式\n");
-            return 0;
-        }
+        if (ret == 0) return 0;
     }
 #endif
-
-    LOG_ERR("Backlight: 所有模式均初始化失败 (-19)");
     return ret;
 }
 
-/* --- UI 句柄 --- */
-static lv_obj_t * main_arc;
-static lv_obj_t * val_label;
-static lv_obj_t * main_chart;
-static lv_chart_series_t * main_ser;
+/* -------------------------------------------------------------------------- */
+/* UI 逻辑层                                     */
+/* -------------------------------------------------------------------------- */
+
+/* 全局对象句柄 */
+static lv_obj_t * meter_temp;    // 温度表圆环
+static lv_obj_t * meter_humi;    // 湿度表圆环
+static lv_obj_t * label_temp_val; // 【新增】温度数值文字句柄
+static lv_obj_t * label_humi_val; // 【新增】湿度数值文字句柄
+
+static lv_obj_t * label_accel;   // IMU文字
+static lv_obj_t * label_lux;     // 光照文字
+static lv_obj_t * chart_light;   // 光照图表 (注意这里是 lv_obj_t*)
+static lv_chart_series_t * ser_lux; 
+
+// 缓存数据
+static uint16_t cached_lux = 0;
+static float cached_temp = 0.0f;
+static float cached_humi = 0.0f;
 
 /**
- * @brief 定时器回调：模拟数据平滑波动 (范围 0-255)
+ * @brief 创建仪表盘辅助函数
+ * @param label_store: 一个指向 lv_obj_t* 的指针，用来把内部创建的 label 句柄传出去
+ */
+static lv_obj_t* create_sensor_meter(lv_obj_t* parent, const char* title, const char* unit, 
+                                     int x, int y, lv_color_t color, lv_obj_t ** label_store) {
+    // 1. 创建圆环
+    lv_obj_t* arc = lv_arc_create(parent);
+    lv_obj_set_size(arc, 70, 70); 
+    lv_obj_align(arc, LV_ALIGN_TOP_LEFT, x, y);
+    lv_arc_set_rotation(arc, 135);
+    lv_arc_set_bg_angles(arc, 0, 270);
+    lv_arc_set_value(arc, 0);
+    lv_obj_remove_style(arc, NULL, LV_PART_KNOB); // 移除旋钮
+    lv_obj_set_style_arc_color(arc, color, LV_PART_INDICATOR);
+    
+    // 2. 创建中间的数值 Label
+    lv_obj_t* val_label = lv_label_create(arc);
+    lv_obj_center(val_label);
+    lv_label_set_text(val_label, "0"); // 初始值
+    lv_obj_set_style_text_color(val_label, lv_color_white(), 0);
+    
+    // 【关键】将这个 label 的句柄赋值给传入的指针，这样外部就能控制它了
+    if (label_store != NULL) {
+        *label_store = val_label;
+    }
+
+    // 3. 创建底部的标题 Label
+    lv_obj_t* title_label = lv_label_create(parent);
+    lv_label_set_text_fmt(title_label, "%s %s", title, unit);
+    lv_obj_align_to(title_label, arc, LV_ALIGN_OUT_BOTTOM_MID, 0, 5);
+    lv_obj_set_style_text_color(title_label, lv_palette_main(LV_PALETTE_GREY), 0);
+    
+    return arc;
+}
+
+/**
+ * @brief 初始化 UI 布局
+ */
+void setup_pandora_dashboard(void) {
+    // 背景
+    lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0x001529), 0);
+
+    // --- 左侧：温度表 ---
+    // 传入 &label_temp_val，让我们可以控制中间的数字
+    meter_temp = create_sensor_meter(lv_scr_act(), "Temp", "C", 15, 25, 
+                                     lv_palette_main(LV_PALETTE_ORANGE), &label_temp_val);
+    lv_arc_set_range(meter_temp, -10, 50);
+
+    // --- 左侧：湿度表 ---
+    // 传入 &label_humi_val
+    meter_humi = create_sensor_meter(lv_scr_act(), "Humi", "%", 15, 125, 
+                                     lv_palette_main(LV_PALETTE_CYAN), &label_humi_val);
+    lv_arc_set_range(meter_humi, 0, 100);
+
+    // --- 右上角：IMU 数据 ---
+    lv_obj_t* imu_cont = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(imu_cont, 120, 100);
+    lv_obj_align(imu_cont, LV_ALIGN_TOP_RIGHT, -10, 25);
+    lv_obj_set_style_bg_opa(imu_cont, LV_OPA_20, 0); 
+    lv_obj_set_style_border_color(imu_cont, lv_color_hex(0x00AEEF), 0);
+    lv_obj_set_style_radius(imu_cont, 8, 0);
+
+    label_accel = lv_label_create(imu_cont);
+    lv_label_set_text(label_accel, "IMU Data:\nWaiting...");
+    lv_obj_set_style_text_color(label_accel, lv_color_white(), 0);
+#ifdef CONFIG_LV_FONT_MONTSERRAT_12
+    lv_obj_set_style_text_font(label_accel, &lv_font_montserrat_12, 0);
+#endif
+
+    // --- 右下角：光照图表 (布局修复核心) ---
+    chart_light = lv_chart_create(lv_scr_act());
+    // 1. 宽度改小：从 210 改为 110，留出左边给湿度表
+    // 2. 高度微调：设为 60
+    lv_obj_set_size(chart_light, 110, 60);
+    // 3. 对齐方式：改为右下角 (BOTTOM_RIGHT)
+    lv_obj_align(chart_light, LV_ALIGN_BOTTOM_RIGHT, -10, -10);
+    
+    lv_chart_set_type(chart_light, LV_CHART_TYPE_LINE);
+    lv_obj_set_style_bg_opa(chart_light, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(chart_light, 0, 0);
+    
+    // 设置Y轴范围 (0-500 Lux)
+    lv_chart_set_range(chart_light, LV_CHART_AXIS_PRIMARY_Y, 0, 500);
+    // 设置线条颜色
+    ser_lux = lv_chart_add_series(chart_light, lv_color_hex(0xFFFF00), LV_CHART_AXIS_PRIMARY_Y);
+
+    // --- 顶部：光照数值 ---
+    label_lux = lv_label_create(lv_scr_act());
+    lv_obj_align(label_lux, LV_ALIGN_TOP_MID, 0, 5);
+    lv_obj_set_style_text_color(label_lux, lv_color_hex(0xFFFF00), 0);
+    lv_label_set_text(label_lux, "Lux: 0");
+}
+
+/**
+ * @brief 定时器回调：刷新数据
  */
 static void ui_timer_cb(lv_timer_t * t) {
-    // static 变量在函数调用结束后不会被销毁，会保留上次的值
-    static uint16_t als_value = 0;
     
-    // 尝试从队列中读取数据
-    // K_NO_WAIT 表示如果没有新消息，立刻返回，不阻塞 LVGL 渲染
-    uint16_t temp_val;
-    if (k_msgq_get(&als_msgq, &temp_val, K_NO_WAIT) == 0) {
-        als_value = temp_val; // 只有拿到新消息才更新
+    /* --- 1. 光照数据处理 --- */
+    uint16_t als_val;
+    if (k_msgq_get(&als_msgq, &als_val, K_NO_WAIT) == 0) {
+        cached_lux = als_val; 
+        
+        lv_chart_set_next_value(chart_light, ser_lux, cached_lux);
+        lv_label_set_text_fmt(label_lux, "Lux: %d", cached_lux);
+
+        // 背光控制逻辑
+        uint16_t target_bl = cached_lux;
+        if (target_bl > 255) target_bl = 255;
+        if (target_bl < 20) target_bl = 20; // 最低亮度限制
+        backlight_set((uint8_t)target_bl);
     }
-    // --- 更新 UI 控件 ---
 
-    // 更新圆环的值
-    lv_arc_set_value(main_arc, als_value);
+    /* --- 2. 温湿度数据处理 (数值显示修复核心) --- */
+    aht10_data_t sensor_data;
+    if (k_msgq_get(&aht10_msgq, &sensor_data, K_NO_WAIT) == 0) {
+        cached_temp = sensor_data.temperature;
+        cached_humi = sensor_data.humidity;
 
-    // 更新文本标签显示百分比或数值
-    char buf[16];
-    // 这里如果依然想显示百分比，需要计算：(val / 255.0) * 100
-    // 如果直接显示原始值，使用下面的代码：
-    snprintf(buf, sizeof(buf), "%d", als_value);
-    lv_label_set_text(val_label, buf);
+        // A. 更新进度条 (圆环)
+        lv_arc_set_value(meter_temp, (int)cached_temp);
+        lv_arc_set_value(meter_humi, (int)cached_humi);
 
-    // 将数据推入波形图 (Chart 控件会自动根据设置的 Range 绘制)
-    lv_chart_set_next_value(main_chart, main_ser, als_value);
-    // 动态调节硬件亮度 (通常 PWM 亮度范围就是 0-255)
-    // display_set_brightness(dev, display_val); 
-    backlight_set(als_value);
+        // B. 【新增】更新中间的文字数值
+        // 之前这里漏掉了，所以一直显示初始的 "0"
+        lv_label_set_text_fmt(label_temp_val, "%d", (int)cached_temp);
+        lv_label_set_text_fmt(label_humi_val, "%d", (int)cached_humi);
+    }
+
+    /* --- 3. IMU 数据占位 --- */
+    // 更新右上角的文字
+    lv_label_set_text_fmt(label_accel, 
+        "IMU (N/A):\nAX: 0.00\nAY: 0.00\nAZ: 1.00\nTemp: %.1f", 
+        (double)cached_temp);
 }
 
 void display_thread_entry(void) 
@@ -138,96 +238,29 @@ void display_thread_entry(void)
     LOG_INF("Display Thread started");
     
     if (!device_is_ready(dev)) {
-        LOG_ERR("Display device %s not ready!", dev->name);
+        LOG_ERR("Display device not ready!");
         return;
     }
 
-    // display_blanking_off 会调用驱动中的回调，确保 0x29 被发出
-    LOG_INF("Turning on display blanking (Sending 0x29)...");
     display_blanking_off(dev);
-    // 确保从 Sleep Out (0x11) 到后续操作之间有足够的硬件稳定时间
     k_msleep(120);
 
-    /* 初始化背光控制 */
-    int ret = backlight_init();
-    if (ret < 0) {
-        LOG_ERR("Backlight init failed (%d)", ret);
-        return;
-    }
-    /* 设置初始背光亮度为 100% */
-    ret = backlight_set(255);
-    if (ret < 0) {
-        LOG_ERR("Backlight set failed (%d)", ret);
-        return;
-    }
+    backlight_init();
+    backlight_set(100); // 开机先亮起来
 
-    // 1. 设置你喜欢的蓝黑色背景 (深蓝色 0x001529)
-    lv_obj_set_style_bg_color(lv_scr_act(), lv_color_hex(0x001529), 0);
+    setup_pandora_dashboard();
 
-    /* --- 2. 创建圆环进度条 (Arc) --- */
-    main_arc = lv_arc_create(lv_scr_act());
-    // 尺寸 160x160，留出空间避开 240 宽度的圆角边缘
-    lv_obj_set_size(main_arc, 160, 160);
-    lv_obj_align(main_arc, LV_ALIGN_CENTER, 0, -35); 
-    /* --- 设置圆环开口方向 --- */
-    // 135度(左下) 到 45度(右下)，顺时针经过顶部，底部留出 90 度缺口
-    lv_arc_set_bg_angles(main_arc, 135, 45);
-    /* --- 设置数据范围 --- */
-    // 必须设置这个，否则 101-255 的数值会导致圆环卡死在满格
-    lv_arc_set_range(main_arc, 0, 255); 
-
-    /* --- 初始化值 --- */
-    lv_arc_set_value(main_arc, 0);
-    
-    // 样式：青色进度条，加粗显示
-    lv_obj_set_style_arc_width(main_arc, 12, LV_PART_MAIN);
-    lv_obj_set_style_arc_width(main_arc, 12, LV_PART_INDICATOR);
-    lv_obj_set_style_arc_color(main_arc, lv_palette_main(LV_PALETTE_CYAN), LV_PART_INDICATOR);
-    lv_obj_remove_style(main_arc, NULL, LV_PART_KNOB); // 移除调节手柄
-
-    /* --- 3. 中央大字数值 --- */
-    val_label = lv_label_create(lv_scr_act());
-    // 请确保 prj.conf 开启了 CONFIG_LV_FONT_MONTSERRAT_48=y
-    lv_obj_set_style_text_font(val_label, &lv_font_montserrat_48, 0);
-    lv_obj_set_style_text_color(val_label, lv_color_hex(0xFFFFFF), 0);
-    lv_obj_align(val_label, LV_ALIGN_CENTER, 0, -35);
-    lv_label_set_text(val_label, "0%");
-
-    /* --- 4. 底部实时平滑波形 (Chart) --- */
-    main_chart = lv_chart_create(lv_scr_act());
-    // 宽度 160，高度 60，向上偏移避开底部圆角
-    lv_obj_set_size(main_chart, 160, 60);
-    lv_obj_align(main_chart, LV_ALIGN_BOTTOM_MID, 0, -35); 
-    lv_chart_set_type(main_chart, LV_CHART_TYPE_LINE);
-    // 设置图表纵轴的取值范围为 0 到 255, LVGL v8/v9 的语法：设置主 Y 轴范围
-    lv_chart_set_range(main_chart, LV_CHART_AXIS_PRIMARY_Y, 0, 255);
-    
-    // 添加波形线 (亮红色)
-    main_ser = lv_chart_add_series(main_chart, lv_palette_main(LV_PALETTE_RED), LV_CHART_AXIS_PRIMARY_Y);
-    
-    // 设置透明样式，融入蓝黑色背景
-    lv_obj_set_style_bg_opa(main_chart, LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(main_chart, 0, 0);
-    lv_obj_set_style_line_width(main_chart, 3, LV_PART_ITEMS);
-
-    /* --- 5. 底部装饰文字 --- */
-    lv_obj_t * info = lv_label_create(lv_scr_act());
-    lv_label_set_text(info, "ST7789V3 | LVGL v9");
-    lv_obj_set_style_text_color(info, lv_palette_main(LV_PALETTE_GREY), 0);
-    lv_obj_align(info, LV_ALIGN_BOTTOM_MID, 0, -15);
-
-    // 启动 50ms 刷新定时器
-    lv_timer_create(ui_timer_cb, 50, NULL);
+    lv_timer_create(ui_timer_cb, 100, NULL);
 
     while (1) {
-        lv_timer_handler();
-        k_msleep(10);
+        lv_task_handler(); 
+        k_msleep(10);      
     }
 }
 
-/* --- 线程定义 --- */
 #define DISPLAY_STACK_SIZE 8192
 #define DISPLAY_PRIORITY 10
+
 K_THREAD_DEFINE(display_thread_tid, DISPLAY_STACK_SIZE, 
                 display_thread_entry, NULL, NULL, NULL,
                 DISPLAY_PRIORITY, 0, 0);
