@@ -101,7 +101,14 @@ kernel thread analyzer
 - IIC_CLK   PD6
 - IIC_SDA   PC1
 
-## AP3216C引脚配置(I2C3)
+## AP3216C&ICM20608引脚配置(I2C3)
 
 - IIC_CLK   PC0
 - IIC_SDA   PC1
+
+## 按键引脚配置
+
+- KEY_UP    WK_UP   PC13    下拉10K
+- KEY_DOWN  KEY1    PD9     上拉10K
+- KEY_LEFT  KEY2    PD8     上拉10K
+- KEY_RIGHT KEY0    PD10    上拉10K

@@ -65,7 +65,7 @@ void icm20608_thread_entry(void *p1, void *p2, void *p3)
         // 读取并打印
         ret = icm20608_read_data(&dev_i2c, &sensor_data);
         if (ret == 0) {
-            LOG_INF("ACC: X=%.2f Y=%.2f Z=%.2f | GYRO: X=%.2f Y=%.2f Z=%.2f | Temp: %.2f",
+            LOG_DBG("ACC: X=%.2f Y=%.2f Z=%.2f | GYRO: X=%.2f Y=%.2f Z=%.2f | Temp: %.2f",
                         (double)sensor_data.accel_x, (double)sensor_data.accel_y, (double)sensor_data.accel_z,
                         (double)sensor_data.gyro_x, (double)sensor_data.gyro_y, (double)sensor_data.gyro_z,
                         (double)sensor_data.temp);

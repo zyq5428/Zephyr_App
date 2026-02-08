@@ -12,6 +12,10 @@
 		led0 = &red_led;
 		led1 = &green_led;
 		pwm-led0 = &pwm_led;
+		sw-up = &joy_up;
+		sw-down = &joy_down;
+		sw-left = &joy_left;
+		sw-right = &joy_right;
 		ap3216c-sensor = &ap3216c_node;
         aht10-sensor = &aht10_node;
 		pwm-backlight = &pwm_bl;
