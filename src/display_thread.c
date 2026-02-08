@@ -25,6 +25,15 @@ LOG_MODULE_REGISTER(Display_TASK, LOG_LEVEL_INF);
 
 static const struct device *dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 
+/* --- 按键硬件定义 --- */
+static const struct gpio_dt_spec btn_up    = GPIO_DT_SPEC_GET(DT_ALIAS(sw_up), gpios);
+static const struct gpio_dt_spec btn_down  = GPIO_DT_SPEC_GET(DT_ALIAS(sw_down), gpios);
+static const struct gpio_dt_spec btn_left  = GPIO_DT_SPEC_GET(DT_ALIAS(sw_left), gpios);
+static const struct gpio_dt_spec btn_right = GPIO_DT_SPEC_GET(DT_ALIAS(sw_right), gpios);
+
+/* 全局输入组句柄 */
+static lv_group_t * input_group;
+
 #define HAS_PWM_BL  DT_NODE_HAS_STATUS(DT_ALIAS(pwm_backlight), okay)
 #define HAS_GPIO_BL DT_NODE_HAS_STATUS(DT_ALIAS(gpio_backlight), okay)
 
@@ -136,6 +145,34 @@ static lv_obj_t* create_sensor_meter(lv_obj_t* parent, const char* title, const 
 }
 
 /**
+ * @brief 传感器圆环的事件处理函数
+ * @param e 事件指针，包含了触发事件的对象、类型等信息
+ */
+static void sensor_arc_event_handler(lv_event_t * e)
+{
+    /* 从事件中提取出主角：那个被点击的对象（圆环） */
+    lv_obj_t * arc = lv_event_get_target(e);
+
+    /* 获取当前的事件代码 */
+    lv_event_code_t code = lv_event_get_code(e);
+
+    /* 如果是点击事件（对应你映射的确认键） */
+    if (code == LV_EVENT_KEY) {
+        /* 将圆环颜色改为绿色 */
+        uint32_t key = lv_indev_get_key(lv_indev_get_act());
+
+        if(key == LV_KEY_ENTER) {
+            /* 下键确认：变绿 */
+            lv_obj_set_style_arc_color(arc, lv_palette_main(LV_PALETTE_GREEN), LV_PART_INDICATOR);
+        } 
+        else if(key == LV_KEY_ESC) {
+            /* 上键返回：变回橙色 */
+            lv_obj_set_style_arc_color(arc, lv_palette_main(LV_PALETTE_ORANGE), LV_PART_INDICATOR);
+        }
+    }
+}
+
+/**
  * @brief 初始化 UI 布局
  */
 void setup_pandora_dashboard(void) {
@@ -191,6 +228,46 @@ void setup_pandora_dashboard(void) {
     lv_obj_align(label_lux, LV_ALIGN_TOP_MID, 0, 5);
     lv_obj_set_style_text_color(label_lux, lv_color_hex(0xFFFF00), 0);
     lv_label_set_text(label_lux, "Lux: 0");
+
+    // --- 实验：让仪表可以被按键控制 ---
+    /* 1. 允许对象被聚焦（这样按键才能选中它） */
+    lv_obj_add_flag(meter_temp, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(meter_humi, LV_OBJ_FLAG_CLICKABLE);
+    
+    /* 2. 手动加入组（虽然设置了默认组，但某些特殊控件需要手动确认） */
+    lv_group_add_obj(input_group, meter_temp);
+    lv_group_add_obj(input_group, meter_humi);
+
+    /* 3. 添加事件：按下“确认键”（你的下键）时，改变圆环颜色 */
+    lv_obj_add_event_cb(meter_temp, sensor_arc_event_handler, LV_EVENT_KEY, NULL);
+    lv_obj_add_event_cb(meter_humi, sensor_arc_event_handler, LV_EVENT_KEY, NULL);
+}
+
+/**
+ * @brief LVGL 键盘读取回调函数
+ */
+static void keypad_read_cb(lv_indev_t * indev, lv_indev_data_t * data)
+{
+    data->state = LV_INDEV_STATE_REL; 
+
+    /* 下=确认, 上=返回, 左=左, 右=右 */
+    if (gpio_pin_get_dt(&btn_down) > 0) {
+        data->state = LV_INDEV_STATE_PR;
+        data->key = LV_KEY_ENTER;
+        LOG_INF("Down Key Pressed!");
+    } else if (gpio_pin_get_dt(&btn_up) > 0) {
+        data->state = LV_INDEV_STATE_PR;
+        data->key = LV_KEY_ESC;
+        LOG_INF("Up Key Pressed!");
+    } else if (gpio_pin_get_dt(&btn_left) > 0) {
+        data->state = LV_INDEV_STATE_PR;
+        data->key = LV_KEY_LEFT;
+        LOG_INF("Left Key Pressed!");
+    } else if (gpio_pin_get_dt(&btn_right) > 0) {
+        data->state = LV_INDEV_STATE_PR;
+        data->key = LV_KEY_RIGHT;
+        LOG_INF("Right Key Pressed!");
+    }
 }
 
 /**
@@ -260,6 +337,32 @@ static void ui_timer_cb(lv_timer_t * t) {
     }
 }
 
+/**
+ * @brief 初始化按键硬件和 LVGL 输入设备
+ */
+void input_init(void)
+{
+    /* 初始化 GPIO */
+    gpio_pin_configure_dt(&btn_up, GPIO_INPUT);
+    gpio_pin_configure_dt(&btn_down, GPIO_INPUT);
+    gpio_pin_configure_dt(&btn_left, GPIO_INPUT);
+    gpio_pin_configure_dt(&btn_right, GPIO_INPUT);
+
+    /* --- LVGL v9 新版注册方式 --- */
+    
+    /* 1. 创建一个输入设备对象，类型设为 KEYPAD */
+    lv_indev_t * indev = lv_indev_create();
+    lv_indev_set_type(indev, LV_INDEV_TYPE_KEYPAD);
+    
+    /* 2. 绑定读取回调函数 */
+    lv_indev_set_read_cb(indev, keypad_read_cb);
+
+    /* 3. 创建并关联组 (Group) */
+    input_group = lv_group_create();
+    lv_group_set_default(input_group);
+    lv_indev_set_group(indev, input_group);
+}
+
 void display_thread_entry(void) 
 {
     LOG_INF("Display Thread started");
@@ -274,6 +377,9 @@ void display_thread_entry(void)
 
     backlight_init();
     backlight_set(100); // 开机先亮起来
+
+    /* --- 初始化输入设备 --- */
+    input_init();
 
     setup_pandora_dashboard();
 

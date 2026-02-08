@@ -34,7 +34,7 @@ target_include_directories(app PRIVATE
 target_sources(app PRIVATE
     src/main.c
     src/led_thread.c
-    src/switch_thread.c
+    # src/switch_thread.c
     src/ap3216c_thread.c
     src/aht10_thread.c
     src/icm20608_thread.c
