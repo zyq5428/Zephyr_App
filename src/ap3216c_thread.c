@@ -105,7 +105,7 @@ void ap3216c_thread_entry(void *p1, void *p2, void *p3)
 /* --- 线程定义和启动 --- */
 
 // 定义栈空间、优先级和线程入口函数
-#define AP3216C_STACK_SIZE 768
+#define AP3216C_STACK_SIZE 512
 #define AP3216C_PRIORITY 7 // 较低的优先级，因为是周期性读取
 
 K_THREAD_DEFINE(ap3216c_tid, AP3216C_STACK_SIZE, 

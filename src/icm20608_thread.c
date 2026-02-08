@@ -22,7 +22,6 @@ static const struct i2c_dt_spec dev_i2c = I2C_DT_SPEC_GET(ICM_NODE);
 static const struct gpio_dt_spec dev_int = GPIO_DT_SPEC_GET(ICM_NODE, int_gpios);
 static struct gpio_callback icm_gpio_cb;
 
-
 /* 信号量：中断通知线程读取 */
 static K_SEM_DEFINE(icm_sem, 0, 1); 
 /* 定义消息队列 */
@@ -88,7 +87,7 @@ void icm20608_thread_entry(void *p1, void *p2, void *p3)
 /* --- 线程定义和启动 --- */
 
 // 定义栈空间、优先级和线程入口函数
-#define ICM20608_STACK_SIZE 2048
+#define ICM20608_STACK_SIZE 1024
 #define ICM20608_PRIORITY 7 // 较高的优先级，因为是中断驱动
 
 K_THREAD_DEFINE(icm_tid, ICM20608_STACK_SIZE, 

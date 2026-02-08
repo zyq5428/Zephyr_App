@@ -36,6 +36,10 @@ static const struct pwm_dt_spec bl_pwm = PWM_DT_SPEC_GET(DT_ALIAS(pwm_backlight)
 static const struct gpio_dt_spec bl_gpio = GPIO_DT_SPEC_GET(DT_ALIAS(gpio_backlight), gpios);
 #endif
 
+/* 定义平滑系数 */
+#define BACKLIGHT_SMOOTH_ALPHA 0.15f  // 数值越小越平滑，建议范围 0.1 - 0.2
+static float current_backlight_f = 100.0f; // 记录当前的浮点亮度值
+
 /* 设置背光亮度 */
 static int backlight_set(uint8_t brightness)
 {
@@ -203,10 +207,18 @@ static void ui_timer_cb(lv_timer_t * t) {
         lv_label_set_text_fmt(label_lux, "Lux: %d", cached_lux);
 
         // 背光控制逻辑
-        uint16_t target_bl = cached_lux;
-        if (target_bl > 255) target_bl = 255;
-        if (target_bl < 20) target_bl = 20; // 最低亮度限制
-        backlight_set((uint8_t)target_bl);
+        // A. 确定目标亮度（限定在 20-255 之间）
+        float target_bl = (float)cached_lux;
+        if (target_bl > 255.0f) target_bl = 255.0f;
+        if (target_bl < 20.0f) target_bl = 20.0f;
+
+        // B. 一阶低通滤波计算
+        // 核心逻辑：当前亮度 = 旧亮度 * 0.85 + 目标亮度 * 0.15
+        current_backlight_f = (current_backlight_f * (1.0f - BACKLIGHT_SMOOTH_ALPHA)) + 
+                              (target_bl * BACKLIGHT_SMOOTH_ALPHA);
+
+        // C. 应用平滑后的亮度
+        backlight_set((uint8_t)current_backlight_f);
     }
 
     /* --- 2. 温湿度数据处理 (数值显示修复核心) --- */
