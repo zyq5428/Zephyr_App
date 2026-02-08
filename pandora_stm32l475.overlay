@@ -101,8 +101,8 @@
 			compatible = "invensense,icm20608";
 			reg = <0x68>;
 			status = "okay";
-			/* PD0 默认检测高电平 */
-			// int-gpios = <&gpiod 0 GPIO_ACTIVE_HIGH>;
+			/* PD0 默认检测高电平,GPTO_EXTI0 */
+			int-gpios = <&gpiod 0 GPIO_ACTIVE_HIGH>;
     	};
     };
 

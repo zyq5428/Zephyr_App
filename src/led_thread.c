@@ -95,7 +95,7 @@ void led_thread_entry(void *p1, void *p2, void *p3)
 }
 
 // 线程栈和定义
-#define LED_STACK_SIZE 768
+#define LED_STACK_SIZE 1024
 #define LED_PRIORITY 15
 
 K_THREAD_DEFINE(led_tid, LED_STACK_SIZE, 

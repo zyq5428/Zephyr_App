@@ -8,7 +8,7 @@
 #include <zephyr/logging/log.h>
 #include "icm20608.h"
 
-LOG_MODULE_REGISTER(ICM_TASK, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(ICM_TASK, LOG_LEVEL_DBG);
 
 /* 获取设备树节点标识符 */
 #define ICM_NODE DT_NODELABEL(icm20608)
@@ -34,20 +34,21 @@ void icm20608_thread_entry(void *p1, void *p2, void *p3)
     int ret;
     icm20608_data_t sensor_data;
 
+    LOG_INF("ICM20608 Thread starting...");
+
     /* ========================================================== */
     /* 模式选择：请根据实际情况注释掉不需要的一种 */
     
     // 【模式 A：主动轮询模式】—— 不依赖 PD0 引脚，只要 I2C 通就能打印
-    ret = icm20608_init_polling(&dev_i2c);
+    // ret = icm20608_init_polling(&dev_i2c);
 
-    /* // 【模式 B：中断触发模式】—— 依赖 PD0 引脚，只有传感器数据准备好才打印
+    // 【模式 B：中断触发模式】—— 依赖 PD0 引脚，只有传感器数据准备好才打印
     #if DT_NODE_HAS_PROP(ICM_NODE, int_gpios)
     ret = icm20608_init_interrupt(&dev_i2c, &dev_int, &icm_gpio_cb, icm_isr_handler);
     #else
     LOG_ERR("DeviceTree overlay lacks 'int-gpios'. Cannot use Interrupt mode.");
     return;
-    #endif 
-    */
+    #endif
     /* ========================================================== */
 
     if (ret != 0) {
@@ -57,11 +58,10 @@ void icm20608_thread_entry(void *p1, void *p2, void *p3)
 
     while (1) {
         /* --- 如果是中断模式，则在此等待信号量 --- */
-        /* #if DT_NODE_HAS_PROP(ICM_NODE, int_gpios)
-           k_sem_take(&icm_sem, K_FOREVER);
-           #endif 
-        */
-
+        #if DT_NODE_HAS_PROP(ICM_NODE, int_gpios)
+        k_sem_take(&icm_sem, K_FOREVER);
+        #endif 
+        
         // 读取并打印
         ret = icm20608_read_data(&dev_i2c, &sensor_data);
         if (ret == 0) {
@@ -71,8 +71,8 @@ void icm20608_thread_entry(void *p1, void *p2, void *p3)
                         (double)sensor_data.temp);
         }
 
-        // 轮询模式下必须有延时，防止串口刷屏；中断模式下该延时可极大减小
-        k_msleep(500);
+        // 轮询模式下必须有延时，防止串口刷屏；中断模式下该延时可极大减小或注释掉
+        // k_msleep(1000);
     }
 }
 
