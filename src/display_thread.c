@@ -13,7 +13,9 @@
 #include <zephyr/logging/log.h>
 
 /* 引入传感器头文件 */
-#include "aht10.h" 
+#include "aht10.h"
+#include "ap3216c.h"
+#include "icm20608.h"
 
 LOG_MODULE_REGISTER(Display_TASK, LOG_LEVEL_INF);
 
@@ -33,9 +35,6 @@ static const struct pwm_dt_spec bl_pwm = PWM_DT_SPEC_GET(DT_ALIAS(pwm_backlight)
 #if HAS_GPIO_BL
 static const struct gpio_dt_spec bl_gpio = GPIO_DT_SPEC_GET(DT_ALIAS(gpio_backlight), gpios);
 #endif
-
-extern struct k_msgq als_msgq; 
-extern struct k_msgq aht10_msgq; 
 
 /* 设置背光亮度 */
 static int backlight_set(uint8_t brightness)
@@ -228,9 +227,25 @@ static void ui_timer_cb(lv_timer_t * t) {
 
     /* --- 3. IMU 数据占位 --- */
     // 更新右上角的文字
-    lv_label_set_text_fmt(label_accel, 
-        "IMU (N/A):\nAX: 0.00\nAY: 0.00\nAZ: 1.00\nTemp: %.1f", 
-        (double)cached_temp);
+    icm20608_data_t imu_data;
+    if (k_msgq_get(&imu_msgq, &imu_data, K_NO_WAIT) == 0) {
+        lv_label_set_text_fmt(label_accel, 
+            "IMU (N/A):\nAX: %.2f\nAY: %.2f\nAZ: %.2f\nTemp: %.1f", 
+            (double)imu_data.accel_x, (double)imu_data.accel_y, (double)imu_data.accel_z,
+            (double)imu_data.temp);
+        /* 交互反馈：如果设备倾斜（Z轴分量减小），将边框设为红色 */
+        lv_obj_t * imu_box = lv_obj_get_parent(label_accel);
+        if (imu_data.accel_z < 0.5f) {
+            lv_obj_set_style_border_color(imu_box, lv_palette_main(LV_PALETTE_RED), 0);
+        } else {
+            lv_obj_set_style_border_color(imu_box, lv_color_hex(0x00AEEF), 0);
+        }
+    } else {
+        lv_label_set_text_fmt(label_accel, 
+            "IMU (N/A):\nAX: 0.00\nAY: 0.00\nAZ: 1.00\nTemp: %.1f", 
+            (double)cached_temp);
+        // LOG_ERR("Failed to obtain IMU data!");
+    }
 }
 
 void display_thread_entry(void) 
@@ -254,7 +269,7 @@ void display_thread_entry(void)
 
     while (1) {
         lv_task_handler(); 
-        k_msleep(10);      
+        k_msleep(30);      
     }
 }
 

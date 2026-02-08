@@ -36,6 +36,10 @@ typedef struct {
     float temp;
 } icm20608_data_t;
 
+/* 【声明】外部消息队列：这行代码不产生实际队列，只是一个“入场券” */
+/* 调用文件只要包含此头文件，就能合法地使用 imu_msgq */
+extern struct k_msgq imu_msgq;
+
 /* --- 驱动接口 API --- */
 
 /**

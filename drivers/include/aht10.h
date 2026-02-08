@@ -7,6 +7,7 @@
 #define AHT10_DRIVER_H
 
 #include <zephyr/types.h>
+#include <zephyr/kernel.h>
 #include <zephyr/drivers/i2c.h>
 
 /* I2C 地址 (AHT10 固定地址) */
@@ -28,6 +29,10 @@ typedef struct {
     float temperature;  /* 温度，单位：摄氏度 (°C) */
     float humidity;     /* 湿度，单位：百分比 (%RH) */
 } aht10_data_t;
+
+/* 【声明】外部消息队列：这行代码不产生实际队列，只是一个“入场券” */
+/* 调用文件只要包含此头文件，就能合法地使用 aht10_msgq */
+extern struct k_msgq aht10_msgq; 
 
 /* --- Zephyr 风格的驱动 API --- */
 

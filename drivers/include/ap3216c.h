@@ -7,10 +7,15 @@
 #define AP3216C_DRIVER_H
 
 #include <zephyr/types.h>
-#include <zephyr/drivers/i2c.h> // 引入 Zephyr I2C 结构体
+#include <zephyr/kernel.h>
+#include <zephyr/drivers/i2c.h>
 
 // I2C 地址
 #define AP3216C_ADDR 0x1e /* 7-bit address */
+
+/* 【声明】外部消息队列：这行代码不产生实际队列，只是一个“入场券” */
+/* 调用文件只要包含此头文件，就能合法地使用 als_msgq */
+extern struct k_msgq als_msgq; 
 
 // --- AP3216C 寄存器定义 ---
 // System Register

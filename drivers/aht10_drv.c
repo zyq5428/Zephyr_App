@@ -3,8 +3,6 @@
  * AHT10 传感器驱动实现 (Zephyr 风格)
  */
 
-#include <zephyr/kernel.h>
-#include <zephyr/drivers/i2c.h>
 #include <zephyr/logging/log.h>
 #include <errno.h>
 
