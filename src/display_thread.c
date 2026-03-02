@@ -145,29 +145,66 @@ static lv_obj_t* create_sensor_meter(lv_obj_t* parent, const char* title, const 
 }
 
 /**
- * @brief 传感器圆环的事件处理函数
- * @param e 事件指针，包含了触发事件的对象、类型等信息
+ * @brief 呼吸动画回调：改变圆环宽度（不占用额外图层内存，最安全）
+ */
+static void anim_width_cb(void * var, int32_t v)
+{
+    if (var == NULL) return;
+    /* 同时改变背景圆环和指标条的宽度 */
+    lv_obj_set_style_arc_width((lv_obj_t *)var, v, 0);
+    lv_obj_set_style_arc_width((lv_obj_t *)var, v, LV_PART_INDICATOR);
+}
+
+/**
+ * @brief 传感器圆环交互逻辑处理
  */
 static void sensor_arc_event_handler(lv_event_t * e)
 {
-    /* 从事件中提取出主角：那个被点击的对象（圆环） */
     lv_obj_t * arc = lv_event_get_target(e);
-
-    /* 获取当前的事件代码 */
     lv_event_code_t code = lv_event_get_code(e);
 
-    /* 如果是点击事件（对应你映射的确认键） */
-    if (code == LV_EVENT_KEY) {
-        /* 将圆环颜色改为绿色 */
+    /* --- 1. 处理焦点逻辑：开始/停止呼吸 --- */
+    if (code == LV_EVENT_FOCUSED) {
+        /* 启动呼吸动画：宽度在 8 到 18 之间循环 */
+        lv_anim_t a;
+        lv_anim_init(&a);
+        lv_anim_set_var(&a, arc);
+        lv_anim_set_exec_cb(&a, anim_width_cb);
+        lv_anim_set_values(&a, 8, 18); 
+        lv_anim_set_time(&a, 600);
+        lv_anim_set_playback_time(&a, 600);
+        lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+        lv_anim_start(&a);
+        
+        LOG_INF("Arc Focused: Breathing animation started");
+    } 
+    else if (code == LV_EVENT_DEFOCUSED) {
+        /* 停止动画 */
+        lv_anim_del(arc, anim_width_cb);
+        /* 恢复默认宽度 (假设初始宽度是 10) */
+        lv_obj_set_style_arc_width(arc, 10, 0);
+        lv_obj_set_style_arc_width(arc, 10, LV_PART_INDICATOR);
+        LOG_INF("Arc Defocused: Animation stopped");
+    }
+
+    /* --- 2. 处理按键动作：确认与返回 --- */
+    else if (code == LV_EVENT_KEY) {
         uint32_t key = lv_indev_get_key(lv_indev_get_act());
 
-        if(key == LV_KEY_ENTER) {
-            /* 下键确认：变绿 */
+        if (key == LV_KEY_ENTER) {
+            /* 下键确认：变为绿色表示已处理/选定 */
             lv_obj_set_style_arc_color(arc, lv_palette_main(LV_PALETTE_GREEN), LV_PART_INDICATOR);
+            LOG_INF("Key ENTER: Arc turned GREEN");
         } 
-        else if(key == LV_KEY_ESC) {
-            /* 上键返回：变回橙色 */
-            lv_obj_set_style_arc_color(arc, lv_palette_main(LV_PALETTE_ORANGE), LV_PART_INDICATOR);
+        else if (key == LV_KEY_ESC) {
+            /* 上键返回：恢复为原始的橙色/青色 */
+            // 这里我们根据对象识别恢复颜色，或者统一恢复橙色
+            if (arc == meter_temp) {
+                lv_obj_set_style_arc_color(arc, lv_palette_main(LV_PALETTE_ORANGE), LV_PART_INDICATOR);
+            } else {
+                lv_obj_set_style_arc_color(arc, lv_palette_main(LV_PALETTE_CYAN), LV_PART_INDICATOR);
+            }
+            LOG_INF("Key ESC: Arc restored to original color");
         }
     }
 }
@@ -190,6 +227,13 @@ void setup_pandora_dashboard(void) {
     meter_humi = create_sensor_meter(lv_scr_act(), "Humi", "%", 15, 125, 
                                      lv_palette_main(LV_PALETTE_CYAN), &label_humi_val);
     lv_arc_set_range(meter_humi, 0, 100);
+
+    /* --- 关键：取消默认的蓝色焦点方框和边框 --- */
+    // 针对键盘聚焦状态（FOCUS_KEY）将外轮廓宽度设为 0
+    lv_obj_set_style_outline_width(meter_temp, 0, LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_outline_width(meter_humi, 0, LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_border_width(meter_temp, 0, LV_STATE_FOCUS_KEY);
+    lv_obj_set_style_border_width(meter_humi, 0, LV_STATE_FOCUS_KEY);
 
     // --- 右上角：IMU 数据 ---
     lv_obj_t* imu_cont = lv_obj_create(lv_scr_act());
@@ -229,7 +273,7 @@ void setup_pandora_dashboard(void) {
     lv_obj_set_style_text_color(label_lux, lv_color_hex(0xFFFF00), 0);
     lv_label_set_text(label_lux, "Lux: 0");
 
-    // --- 实验：让仪表可以被按键控制 ---
+    /* --- 交互配置 --- */
     /* 1. 允许对象被聚焦（这样按键才能选中它） */
     lv_obj_add_flag(meter_temp, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(meter_humi, LV_OBJ_FLAG_CLICKABLE);
@@ -239,8 +283,11 @@ void setup_pandora_dashboard(void) {
     lv_group_add_obj(input_group, meter_humi);
 
     /* 3. 添加事件：按下“确认键”（你的下键）时，改变圆环颜色 */
-    lv_obj_add_event_cb(meter_temp, sensor_arc_event_handler, LV_EVENT_KEY, NULL);
-    lv_obj_add_event_cb(meter_humi, sensor_arc_event_handler, LV_EVENT_KEY, NULL);
+    lv_obj_add_event_cb(meter_temp, sensor_arc_event_handler, LV_EVENT_ALL, NULL);
+    lv_obj_add_event_cb(meter_humi, sensor_arc_event_handler, LV_EVENT_ALL, NULL);
+
+    /* 默认聚焦在第一个圆环 */
+    lv_group_focus_obj(meter_temp);
 }
 
 /**
@@ -250,7 +297,7 @@ static void keypad_read_cb(lv_indev_t * indev, lv_indev_data_t * data)
 {
     data->state = LV_INDEV_STATE_REL; 
 
-    /* 下=确认, 上=返回, 左=左, 右=右 */
+    /* 下=确认, 上=返回, 左=上一个, 右=下一个 */
     if (gpio_pin_get_dt(&btn_down) > 0) {
         data->state = LV_INDEV_STATE_PR;
         data->key = LV_KEY_ENTER;
@@ -261,11 +308,11 @@ static void keypad_read_cb(lv_indev_t * indev, lv_indev_data_t * data)
         LOG_INF("Up Key Pressed!");
     } else if (gpio_pin_get_dt(&btn_left) > 0) {
         data->state = LV_INDEV_STATE_PR;
-        data->key = LV_KEY_LEFT;
+        data->key = LV_KEY_PREV;
         LOG_INF("Left Key Pressed!");
     } else if (gpio_pin_get_dt(&btn_right) > 0) {
         data->state = LV_INDEV_STATE_PR;
-        data->key = LV_KEY_RIGHT;
+        data->key = LV_KEY_NEXT;
         LOG_INF("Right Key Pressed!");
     }
 }
