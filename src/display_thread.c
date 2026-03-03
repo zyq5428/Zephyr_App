@@ -108,6 +108,10 @@ static uint16_t cached_lux = 0;
 static float cached_temp = 0.0f;
 static float cached_humi = 0.0f;
 
+static bool is_full_screen = false;  // 记录当前是否处于全屏状态
+static lv_point_t old_pos;           // 记录对象的原始位置
+static lv_area_t old_size;           // 记录对象的原始尺寸
+
 /**
  * @brief 创建仪表盘辅助函数
  * @param label_store: 一个指向 lv_obj_t* 的指针，用来把内部创建的 label 句柄传出去
@@ -145,76 +149,94 @@ static lv_obj_t* create_sensor_meter(lv_obj_t* parent, const char* title, const 
 }
 
 /**
- * @brief 通用呼吸回调：改变外轮廓透明度
+ * @brief 隐藏/显示屏幕上除当前对象外的所有内容
  */
-static void anim_generic_focus_cb(void * var, int32_t v)
-{
-    if (var == NULL) return;
+static void set_main_ui_visible(lv_obj_t * current_obj, bool visible) {
+    lv_obj_t * screen = lv_scr_act();
+    uint32_t child_cnt = lv_obj_get_child_cnt(screen);
     
-    lv_obj_t * obj = (lv_obj_t *)var;
-
-    // 1. 让光环稍微远离圆环边缘 (3-5像素)，避免重叠
-    lv_obj_set_style_outline_pad(obj, 5, 0); 
-    
-    // 2. 增加光环的宽度，让它更粗、更醒目
-    lv_obj_set_style_outline_width(obj, 4, 0);
-    
-    // 3. 使用鲜艳的颜色（如青色或黄色）
-    lv_obj_set_style_outline_color(obj, lv_palette_main(LV_PALETTE_CYAN), 0);
-    
-    // 4. 呼吸透明度
-    lv_obj_set_style_outline_opa(obj, (lv_opa_t)v, 0);
+    for(uint32_t i = 0; i < child_cnt; i++) {
+        lv_obj_t * child = lv_obj_get_child(screen, i);
+        // 关键：不要隐藏正在放大的那个对象，也不要隐藏背景/顶层
+        if (child != current_obj) {
+            if(visible) lv_obj_clear_flag(child, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 }
 
 /**
- * @brief 四个对象共用的事件处理器
- */
-/**
- * @brief 四个对象共用的事件处理器 - 颜色切换版
+ * @brief 通用传感器对象交互处理器
+ * 支持：颜色焦点提示、全屏放大、全屏缩小、自动隐藏干扰元素
  */
 static void sensor_common_event_handler(lv_event_t * e)
 {
     lv_obj_t * obj = lv_event_get_target(e);
     lv_event_code_t code = lv_event_get_code(e);
 
-    /* --- 1. 处理聚焦：高亮显示 --- */
-    if (code == LV_EVENT_FOCUSED) {
-        // 彻底取消系统默认方框
-        lv_obj_set_style_outline_width(obj, 0, LV_STATE_FOCUS_KEY);
-        
-        // 聚焦时：将圆环颜色设为亮蓝色，并加粗
-        lv_obj_set_style_arc_color(obj, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
-        lv_obj_set_style_arc_width(obj, 15, LV_PART_INDICATOR); // 稍微加粗，增加视觉差
-        
-        // 如果是 IMU 面板（普通对象），可以改边框色
-        lv_obj_set_style_border_width(obj, 3, 0);
-        lv_obj_set_style_border_color(obj, lv_palette_main(LV_PALETTE_BLUE), 0);
-        
-        LOG_INF("Object Focused: Highlighted BLUE");
-    } 
-
-    /* --- 2. 处理失去焦点：恢复暗色 --- */
-    else if (code == LV_EVENT_DEFOCUSED) {
-        // 失去焦点：变为暗淡的灰色（或者你定义的原始颜色）
-        lv_obj_set_style_arc_color(obj, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_INDICATOR);
-        lv_obj_set_style_arc_width(obj, 10, LV_PART_INDICATOR); // 恢复正常宽度
-        
-        // IMU 面板恢复
-        lv_obj_set_style_border_width(obj, 1, 0);
-        lv_obj_set_style_border_color(obj, lv_palette_main(LV_PALETTE_GREY), 0);
+    /* 1. 焦点视觉反馈 (保持原样) */
+    if (!is_full_screen) {
+        if (code == LV_EVENT_FOCUSED) {
+            lv_obj_set_style_outline_width(obj, 0, LV_STATE_FOCUS_KEY);
+            lv_obj_set_style_arc_color(obj, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
+        } else if (code == LV_EVENT_DEFOCUSED) {
+            lv_obj_set_style_arc_color(obj, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_INDICATOR);
+        }
     }
 
-    /* --- 3. 处理按键：点击确认 --- */
-    else if (code == LV_EVENT_KEY) {
+    /* 2. 按键交互逻辑 */
+    if (code == LV_EVENT_KEY) {
         uint32_t key = lv_indev_get_key(lv_indev_get_act());
-        if (key == LV_KEY_ENTER) {
-            // 点击确认：变为绿色反馈
-            lv_obj_set_style_arc_color(obj, lv_palette_main(LV_PALETTE_GREEN), LV_PART_INDICATOR);
-            LOG_INF("Object Selected: Feedback GREEN");
-        }
-        else if (key == LV_KEY_ESC) {
-            // 按返回：重新回到高亮的蓝色选中状态
-            lv_obj_set_style_arc_color(obj, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
+
+        // --- 【ENTER】: 淡入全屏 ---
+        if (key == LV_KEY_ENTER && !is_full_screen) {
+            is_full_screen = true;
+
+            // 记录原始位置（为了退回来）
+            old_pos.x = lv_obj_get_x(obj);
+            old_pos.y = lv_obj_get_y(obj);
+            old_size.x1 = lv_obj_get_width(obj);
+            old_size.y1 = lv_obj_get_height(obj);
+
+            // A. 先瞬间“清场”
+            set_main_ui_visible(obj, false);
+            lv_obj_move_foreground(obj);
+            
+            // B. 设置背景和初始透明度（完全透明）
+            lv_obj_set_style_bg_color(obj, lv_color_hex(0x000000), 0);
+            lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
+            lv_obj_set_style_opa(obj, LV_OPA_TRANSP, 0); // 整个对象透明
+
+            // C. 瞬间完成大小位置变换 (不卡顿的核心)
+            lv_obj_set_align(obj, LV_ALIGN_TOP_LEFT);
+            lv_obj_set_pos(obj, 0, 0);
+            lv_obj_set_size(obj, 240, 240);
+            
+            // D. 启动透明度淡入动画
+            lv_anim_t a;
+            lv_anim_init(&a);
+            lv_anim_set_var(&a, obj);
+            lv_anim_set_time(&a, 250); // 250ms 的淡入非常高级
+            lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_set_style_opa);
+            lv_anim_set_values(&a, LV_OPA_TRANSP, LV_OPA_COVER);
+            lv_anim_set_path_cb(&a, lv_anim_path_linear);
+            lv_anim_start(&a);
+        } 
+
+        // --- 【ESC】: 淡出回位 ---
+        else if (key == LV_KEY_ESC && is_full_screen) {
+            is_full_screen = false;
+            
+            // A. 瞬间变回原始大小和位置
+            lv_obj_set_pos(obj, old_pos.x, old_pos.y);
+            lv_obj_set_size(obj, (int32_t)old_size.x1, (int32_t)old_size.y1);
+            
+            // B. 恢复其他 UI
+            set_main_ui_visible(obj, true);
+            lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, 0);
+            
+            // C. 做一个简单的闪现或淡入效果回来，或者干脆直接显示
+            lv_obj_set_style_opa(obj, LV_OPA_COVER, 0);
         }
     }
 }
@@ -372,7 +394,7 @@ static void ui_timer_cb(lv_timer_t * t) {
     icm20608_data_t imu_data;
     if (k_msgq_get(&imu_msgq, &imu_data, K_NO_WAIT) == 0) {
         lv_label_set_text_fmt(label_accel, 
-            "IMU (N/A):\nAX: %.2f\nAY: %.2f\nAZ: %.2f\nTemp: %.1f", 
+            "IMU (20608):\nAX: %.2f\nAY: %.2f\nAZ: %.2f\nTemp: %.1f", 
             (double)imu_data.accel_x, (double)imu_data.accel_y, (double)imu_data.accel_z,
             (double)imu_data.temp);
         /* 交互反馈：如果设备倾斜（Z轴分量减小），将边框设为红色 */
