@@ -145,66 +145,76 @@ static lv_obj_t* create_sensor_meter(lv_obj_t* parent, const char* title, const 
 }
 
 /**
- * @brief 呼吸动画回调：改变圆环宽度（不占用额外图层内存，最安全）
+ * @brief 通用呼吸回调：改变外轮廓透明度
  */
-static void anim_width_cb(void * var, int32_t v)
+static void anim_generic_focus_cb(void * var, int32_t v)
 {
     if (var == NULL) return;
-    /* 同时改变背景圆环和指标条的宽度 */
-    lv_obj_set_style_arc_width((lv_obj_t *)var, v, 0);
-    lv_obj_set_style_arc_width((lv_obj_t *)var, v, LV_PART_INDICATOR);
+    
+    lv_obj_t * obj = (lv_obj_t *)var;
+
+    // 1. 让光环稍微远离圆环边缘 (3-5像素)，避免重叠
+    lv_obj_set_style_outline_pad(obj, 5, 0); 
+    
+    // 2. 增加光环的宽度，让它更粗、更醒目
+    lv_obj_set_style_outline_width(obj, 4, 0);
+    
+    // 3. 使用鲜艳的颜色（如青色或黄色）
+    lv_obj_set_style_outline_color(obj, lv_palette_main(LV_PALETTE_CYAN), 0);
+    
+    // 4. 呼吸透明度
+    lv_obj_set_style_outline_opa(obj, (lv_opa_t)v, 0);
 }
 
 /**
- * @brief 传感器圆环交互逻辑处理
+ * @brief 四个对象共用的事件处理器
  */
-static void sensor_arc_event_handler(lv_event_t * e)
+/**
+ * @brief 四个对象共用的事件处理器 - 颜色切换版
+ */
+static void sensor_common_event_handler(lv_event_t * e)
 {
-    lv_obj_t * arc = lv_event_get_target(e);
+    lv_obj_t * obj = lv_event_get_target(e);
     lv_event_code_t code = lv_event_get_code(e);
 
-    /* --- 1. 处理焦点逻辑：开始/停止呼吸 --- */
+    /* --- 1. 处理聚焦：高亮显示 --- */
     if (code == LV_EVENT_FOCUSED) {
-        /* 启动呼吸动画：宽度在 8 到 18 之间循环 */
-        lv_anim_t a;
-        lv_anim_init(&a);
-        lv_anim_set_var(&a, arc);
-        lv_anim_set_exec_cb(&a, anim_width_cb);
-        lv_anim_set_values(&a, 8, 18); 
-        lv_anim_set_time(&a, 600);
-        lv_anim_set_playback_time(&a, 600);
-        lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
-        lv_anim_start(&a);
+        // 彻底取消系统默认方框
+        lv_obj_set_style_outline_width(obj, 0, LV_STATE_FOCUS_KEY);
         
-        LOG_INF("Arc Focused: Breathing animation started");
+        // 聚焦时：将圆环颜色设为亮蓝色，并加粗
+        lv_obj_set_style_arc_color(obj, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
+        lv_obj_set_style_arc_width(obj, 15, LV_PART_INDICATOR); // 稍微加粗，增加视觉差
+        
+        // 如果是 IMU 面板（普通对象），可以改边框色
+        lv_obj_set_style_border_width(obj, 3, 0);
+        lv_obj_set_style_border_color(obj, lv_palette_main(LV_PALETTE_BLUE), 0);
+        
+        LOG_INF("Object Focused: Highlighted BLUE");
     } 
+
+    /* --- 2. 处理失去焦点：恢复暗色 --- */
     else if (code == LV_EVENT_DEFOCUSED) {
-        /* 停止动画 */
-        lv_anim_del(arc, anim_width_cb);
-        /* 恢复默认宽度 (假设初始宽度是 10) */
-        lv_obj_set_style_arc_width(arc, 10, 0);
-        lv_obj_set_style_arc_width(arc, 10, LV_PART_INDICATOR);
-        LOG_INF("Arc Defocused: Animation stopped");
+        // 失去焦点：变为暗淡的灰色（或者你定义的原始颜色）
+        lv_obj_set_style_arc_color(obj, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_INDICATOR);
+        lv_obj_set_style_arc_width(obj, 10, LV_PART_INDICATOR); // 恢复正常宽度
+        
+        // IMU 面板恢复
+        lv_obj_set_style_border_width(obj, 1, 0);
+        lv_obj_set_style_border_color(obj, lv_palette_main(LV_PALETTE_GREY), 0);
     }
 
-    /* --- 2. 处理按键动作：确认与返回 --- */
+    /* --- 3. 处理按键：点击确认 --- */
     else if (code == LV_EVENT_KEY) {
         uint32_t key = lv_indev_get_key(lv_indev_get_act());
-
         if (key == LV_KEY_ENTER) {
-            /* 下键确认：变为绿色表示已处理/选定 */
-            lv_obj_set_style_arc_color(arc, lv_palette_main(LV_PALETTE_GREEN), LV_PART_INDICATOR);
-            LOG_INF("Key ENTER: Arc turned GREEN");
-        } 
+            // 点击确认：变为绿色反馈
+            lv_obj_set_style_arc_color(obj, lv_palette_main(LV_PALETTE_GREEN), LV_PART_INDICATOR);
+            LOG_INF("Object Selected: Feedback GREEN");
+        }
         else if (key == LV_KEY_ESC) {
-            /* 上键返回：恢复为原始的橙色/青色 */
-            // 这里我们根据对象识别恢复颜色，或者统一恢复橙色
-            if (arc == meter_temp) {
-                lv_obj_set_style_arc_color(arc, lv_palette_main(LV_PALETTE_ORANGE), LV_PART_INDICATOR);
-            } else {
-                lv_obj_set_style_arc_color(arc, lv_palette_main(LV_PALETTE_CYAN), LV_PART_INDICATOR);
-            }
-            LOG_INF("Key ESC: Arc restored to original color");
+            // 按返回：重新回到高亮的蓝色选中状态
+            lv_obj_set_style_arc_color(obj, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
         }
     }
 }
@@ -228,12 +238,6 @@ void setup_pandora_dashboard(void) {
                                      lv_palette_main(LV_PALETTE_CYAN), &label_humi_val);
     lv_arc_set_range(meter_humi, 0, 100);
 
-    /* --- 关键：取消默认的蓝色焦点方框和边框 --- */
-    // 针对键盘聚焦状态（FOCUS_KEY）将外轮廓宽度设为 0
-    lv_obj_set_style_outline_width(meter_temp, 0, LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_outline_width(meter_humi, 0, LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_border_width(meter_temp, 0, LV_STATE_FOCUS_KEY);
-    lv_obj_set_style_border_width(meter_humi, 0, LV_STATE_FOCUS_KEY);
 
     // --- 右上角：IMU 数据 ---
     lv_obj_t* imu_cont = lv_obj_create(lv_scr_act());
@@ -273,18 +277,20 @@ void setup_pandora_dashboard(void) {
     lv_obj_set_style_text_color(label_lux, lv_color_hex(0xFFFF00), 0);
     lv_label_set_text(label_lux, "Lux: 0");
 
-    /* --- 交互配置 --- */
-    /* 1. 允许对象被聚焦（这样按键才能选中它） */
-    lv_obj_add_flag(meter_temp, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_flag(meter_humi, LV_OBJ_FLAG_CLICKABLE);
+    /* --- 将四个对象加入 Group 并绑定事件 --- */
+    lv_obj_t * objs[] = {meter_temp, meter_humi, imu_cont, chart_light};
     
-    /* 2. 手动加入组（虽然设置了默认组，但某些特殊控件需要手动确认） */
-    lv_group_add_obj(input_group, meter_temp);
-    lv_group_add_obj(input_group, meter_humi);
-
-    /* 3. 添加事件：按下“确认键”（你的下键）时，改变圆环颜色 */
-    lv_obj_add_event_cb(meter_temp, sensor_arc_event_handler, LV_EVENT_ALL, NULL);
-    lv_obj_add_event_cb(meter_humi, sensor_arc_event_handler, LV_EVENT_ALL, NULL);
+    for(int i = 0; i < 4; i++) {
+        lv_obj_add_flag(objs[i], LV_OBJ_FLAG_CLICKABLE);
+        lv_group_add_obj(input_group, objs[i]);
+        lv_obj_add_event_cb(objs[i], sensor_common_event_handler, LV_EVENT_ALL, NULL);
+        // 初始状态全部设为灰色（代表未选中）
+        lv_obj_set_style_arc_color(objs[i], lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_INDICATOR);
+        
+        // 彻底取消每个对象的默认方框
+        lv_obj_set_style_outline_width(objs[i], 0, LV_STATE_FOCUS_KEY);
+        lv_obj_set_style_border_width(objs[i], 0, LV_STATE_FOCUS_KEY);
+    }
 
     /* 默认聚焦在第一个圆环 */
     lv_group_focus_obj(meter_temp);
