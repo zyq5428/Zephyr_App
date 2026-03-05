@@ -95,13 +95,21 @@ int backlight_init(void)
 /* 全局对象句柄 */
 static lv_obj_t * meter_temp;    // 温度表圆环
 static lv_obj_t * meter_humi;    // 湿度表圆环
-static lv_obj_t * label_temp_val; // 【新增】温度数值文字句柄
-static lv_obj_t * label_humi_val; // 【新增】湿度数值文字句柄
+static lv_obj_t * label_temp_val; // 温度数值文字句柄
+static lv_obj_t * label_humi_val; // 湿度数值文字句柄
 
 static lv_obj_t * label_accel;   // IMU文字
 static lv_obj_t * label_lux;     // 光照文字
-static lv_obj_t * chart_light;   // 光照图表 (注意这里是 lv_obj_t*)
+static lv_obj_t * chart_light;   // 光照图表
 static lv_chart_series_t * ser_lux; 
+
+/* --- 新增：小球模式变量 --- */
+static lv_obj_t *imu_ball = NULL;    // 小球对象句柄
+static bool is_ball_active = false;  // 标记是否处于加速度计小球模拟模式
+static lv_obj_t *imu_cont_global;    // 记录 IMU 容器句柄，方便定时器识别
+/* 用于平滑移动的影子坐标 */
+static float ball_current_x = 110.0f;
+static float ball_current_y = 110.0f;
 
 // 缓存数据
 static uint16_t cached_lux = 0;
@@ -159,8 +167,10 @@ static void set_main_ui_visible(lv_obj_t * current_obj, bool visible) {
         lv_obj_t * child = lv_obj_get_child(screen, i);
         // 关键：不要隐藏正在放大的那个对象，也不要隐藏背景/顶层
         if (child != current_obj) {
-            if(visible) lv_obj_clear_flag(child, LV_OBJ_FLAG_HIDDEN);
-            else lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
+            if(visible) 
+                lv_obj_clear_flag(child, LV_OBJ_FLAG_HIDDEN);
+            else 
+                lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN);
         }
     }
 }
@@ -178,9 +188,18 @@ static void sensor_common_event_handler(lv_event_t * e)
     if (!is_full_screen) {
         if (code == LV_EVENT_FOCUSED) {
             lv_obj_set_style_outline_width(obj, 0, LV_STATE_FOCUS_KEY);
-            lv_obj_set_style_arc_color(obj, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
+            // 这里判断是否是 IMU 容器（它不是 arc，所以逻辑略有不同）
+            if(lv_obj_check_type(obj, &lv_arc_class)) {
+                lv_obj_set_style_arc_color(obj, lv_palette_main(LV_PALETTE_BLUE), LV_PART_INDICATOR);
+            } else {
+                lv_obj_set_style_border_color(obj, lv_palette_main(LV_PALETTE_BLUE), 0);
+            }
         } else if (code == LV_EVENT_DEFOCUSED) {
-            lv_obj_set_style_arc_color(obj, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_INDICATOR);
+            if(lv_obj_check_type(obj, &lv_arc_class)) {
+                lv_obj_set_style_arc_color(obj, lv_palette_lighten(LV_PALETTE_GREY, 1), LV_PART_INDICATOR);
+            } else {
+                lv_obj_set_style_border_color(obj, lv_color_hex(0x00AEEF), 0);
+            }
         }
     }
 
@@ -188,55 +207,91 @@ static void sensor_common_event_handler(lv_event_t * e)
     if (code == LV_EVENT_KEY) {
         uint32_t key = lv_indev_get_key(lv_indev_get_act());
 
-        // --- 【ENTER】: 淡入全屏 ---
+        // --- 【ENTER】: 进入全屏/小球模式 ---
         if (key == LV_KEY_ENTER && !is_full_screen) {
             is_full_screen = true;
 
-            // 记录原始位置（为了退回来）
+            // 停止可能存在的残留动画
+            lv_anim_del(obj, NULL);
+
+            // 核心：在改变任何属性前，精准记录原始位置和尺寸
             old_pos.x = lv_obj_get_x(obj);
             old_pos.y = lv_obj_get_y(obj);
             old_size.x1 = lv_obj_get_width(obj);
             old_size.y1 = lv_obj_get_height(obj);
 
-            // A. 先瞬间“清场”
             set_main_ui_visible(obj, false);
-            lv_obj_move_foreground(obj);
+            lv_obj_move_foreground(obj); // 将容器移到最前
             
-            // B. 设置背景和初始透明度（完全透明）
+            // 1. 先设置容器为全屏黑色背景
+            lv_obj_set_size(obj, 240, 240);
+            lv_obj_set_pos(obj, 0, 0);
             lv_obj_set_style_bg_color(obj, lv_color_hex(0x000000), 0);
             lv_obj_set_style_bg_opa(obj, LV_OPA_COVER, 0);
-            lv_obj_set_style_opa(obj, LV_OPA_TRANSP, 0); // 整个对象透明
 
-            // C. 瞬间完成大小位置变换 (不卡顿的核心)
-            lv_obj_set_align(obj, LV_ALIGN_TOP_LEFT);
-            lv_obj_set_pos(obj, 0, 0);
-            lv_obj_set_size(obj, 240, 240);
+            // 2. 如果是 IMU 容器，处理小球
+            if (obj == imu_cont_global) {
+                is_ball_active = true;
+                lv_obj_add_flag(label_accel, LV_OBJ_FLAG_HIDDEN);
+                
+                if (imu_ball == NULL) {
+                    imu_ball = lv_obj_create(obj);
+                    lv_obj_set_size(imu_ball, 20, 20);
+                    lv_obj_set_style_radius(imu_ball, LV_RADIUS_CIRCLE, 0);
+                    lv_obj_set_style_bg_color(imu_ball, lv_palette_main(LV_PALETTE_RED), 0);
+                    lv_obj_set_style_shadow_width(imu_ball, 15, 0);
+                    lv_obj_set_style_shadow_color(imu_ball, lv_palette_main(LV_PALETTE_RED), 0);
+                }
+                
+                // 【核心修复】：显式清除隐藏标志并将其移至子对象的最前端
+                lv_obj_clear_flag(imu_ball, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_move_foreground(imu_ball); // 确保小球在黑色背景之上
+                lv_obj_set_pos(imu_ball, 110, 110); 
+            }
             
-            // D. 启动透明度淡入动画
+            // 执行淡入动画
+            lv_obj_set_style_opa(obj, LV_OPA_TRANSP, 0);
             lv_anim_t a;
             lv_anim_init(&a);
             lv_anim_set_var(&a, obj);
-            lv_anim_set_time(&a, 250); // 250ms 的淡入非常高级
+            lv_anim_set_time(&a, 200);
             lv_anim_set_exec_cb(&a, (lv_anim_exec_xcb_t)lv_obj_set_style_opa);
             lv_anim_set_values(&a, LV_OPA_TRANSP, LV_OPA_COVER);
-            lv_anim_set_path_cb(&a, lv_anim_path_linear);
             lv_anim_start(&a);
         } 
 
-        // --- 【ESC】: 淡出回位 ---
+        // --- 【ESC】: 退出全屏/还原数值模式 ---
         else if (key == LV_KEY_ESC && is_full_screen) {
             is_full_screen = false;
+
+            // 彻底停止所有动画和属性修改
+            lv_anim_del(obj, NULL);
+
+            /* --- 关键修复：强制重置对齐方式为左上角 --- */
+            /* 这样 old_pos.x 和 old_pos.y 的绝对像素值才会生效 */
+            lv_obj_set_align(obj, LV_ALIGN_TOP_LEFT);
             
-            // A. 瞬间变回原始大小和位置
-            lv_obj_set_pos(obj, old_pos.x, old_pos.y);
+            if (obj == imu_cont_global) {
+                is_ball_active = false;
+                lv_obj_add_flag(imu_ball, LV_OBJ_FLAG_HIDDEN);    // 隐藏小球
+                lv_obj_clear_flag(label_accel, LV_OBJ_FLAG_HIDDEN); // 恢复文字显示
+            }
+
+            // 1. 暴力清除进入时设置的本地属性（这一步最重要，防止样式污染坐标计算）
+            lv_obj_remove_local_style_prop(obj, LV_STYLE_BG_OPA, 0);
+            lv_obj_remove_local_style_prop(obj, LV_STYLE_BG_COLOR, 0);
+            lv_obj_remove_local_style_prop(obj, LV_STYLE_OPA, 0);
+
+            // 2. 严格还原：先还原尺寸，再还原坐标
             lv_obj_set_size(obj, (int32_t)old_size.x1, (int32_t)old_size.y1);
+            lv_obj_set_pos(obj, old_pos.x, old_pos.y);
             
-            // B. 恢复其他 UI
-            set_main_ui_visible(obj, true);
+            // 3. 显式设回主界面半透明/透明样式
             lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, 0);
-            
-            // C. 做一个简单的闪现或淡入效果回来，或者干脆直接显示
-            lv_obj_set_style_opa(obj, LV_OPA_COVER, 0);
+            set_main_ui_visible(obj, true);
+
+            // 4. 强制通知 LVGL 整个屏幕已经“脏了”，需要重新刷新全部像素
+            lv_obj_invalidate(lv_scr_act());
         }
     }
 }
@@ -263,6 +318,7 @@ void setup_pandora_dashboard(void) {
 
     // --- 右上角：IMU 数据 ---
     lv_obj_t* imu_cont = lv_obj_create(lv_scr_act());
+    imu_cont_global = imu_cont; // 保存到全局变量
     lv_obj_set_size(imu_cont, 120, 100);
     lv_obj_align(imu_cont, LV_ALIGN_TOP_RIGHT, -10, 25);
     lv_obj_set_style_bg_opa(imu_cont, LV_OPA_20, 0); 
@@ -393,22 +449,52 @@ static void ui_timer_cb(lv_timer_t * t) {
     // 更新右上角的文字
     icm20608_data_t imu_data;
     if (k_msgq_get(&imu_msgq, &imu_data, K_NO_WAIT) == 0) {
-        lv_label_set_text_fmt(label_accel, 
-            "IMU (20608):\nAX: %.2f\nAY: %.2f\nAZ: %.2f\nTemp: %.1f", 
-            (double)imu_data.accel_x, (double)imu_data.accel_y, (double)imu_data.accel_z,
-            (double)imu_data.temp);
-        /* 交互反馈：如果设备倾斜（Z轴分量减小），将边框设为红色 */
-        lv_obj_t * imu_box = lv_obj_get_parent(label_accel);
-        if (imu_data.accel_z < 0.5f) {
-            lv_obj_set_style_border_color(imu_box, lv_palette_main(LV_PALETTE_RED), 0);
-        } else {
-            lv_obj_set_style_border_color(imu_box, lv_color_hex(0x00AEEF), 0);
+        
+        if (is_ball_active && imu_ball) {
+            /* * 小球物理映射算法修复：
+             * 1. 屏幕中心是 (120, 120)。
+             * 2. 小球大小是 20x20，所以小球中心对准屏幕中心时，其左上角坐标应为 (110, 110)。
+             * 3. 加速度计 X 轴对应屏幕 Y 轴，Y 轴对应屏幕 X 轴（取决于你的安装方向）。
+             */
+            
+            // 1. 设定灵敏度和滤波系数
+            const float sensitivity = 100.0f; 
+            const float filter_gain = 0.15f; // 滤波系数(0.0~1.0)，越小越平滑，0.1~0.2 效果最佳
+
+            // 2. 计算目标位置 (针对你的板子映射：accel_x->x, accel_y->y)
+            // 如果方向反了，请在 imu_data 前加负号
+            float target_x = 110.0f + (imu_data.accel_x * sensitivity);
+            float target_y = 110.0f - (imu_data.accel_y * sensitivity);
+
+            // 3. 一阶滤波：让当前位置向目标位置“平滑靠拢”
+            ball_current_x = (ball_current_x * (1.0f - filter_gain)) + (target_x * filter_gain);
+            ball_current_y = (ball_current_y * (1.0f - filter_gain)) + (target_y * filter_gain);
+
+            // 4. 边界检查
+            if(ball_current_x < 0) ball_current_x = 0;
+            if(ball_current_x > 220) ball_current_x = 220;
+            if(ball_current_y < 0) ball_current_y = 0;
+            if(ball_current_y > 220) ball_current_y = 220;
+
+            // 5. 应用坐标 (转换为整数)
+            lv_obj_set_pos(imu_ball, (int16_t)ball_current_x, (int16_t)ball_current_y);
+        } 
+        else {
+            /* 标准数值模式 (重置平滑坐标为中心，防止下次进入时闪现) */
+            ball_current_x = 110.0f;
+            ball_current_y = 110.0f;
+
+            lv_label_set_text_fmt(label_accel, 
+                "IMU Data:\nAX: %.2f\nAY: %.2f\nAZ: %.2f\nTemp: %.1f", 
+                (double)imu_data.accel_x, (double)imu_data.accel_y, (double)imu_data.accel_z,
+                (double)imu_data.temp);
+
+            if (imu_data.accel_z < 0.5f) {
+                lv_obj_set_style_border_color(imu_cont_global, lv_palette_main(LV_PALETTE_RED), 0);
+            } else {
+                lv_obj_set_style_border_color(imu_cont_global, lv_color_hex(0x00AEEF), 0);
+            }
         }
-    } else {
-        lv_label_set_text_fmt(label_accel, 
-            "IMU (N/A):\nAX: 0.00\nAY: 0.00\nAZ: 1.00\nTemp: %.1f", 
-            (double)cached_temp);
-        // LOG_ERR("Failed to obtain IMU data!");
     }
 }
 
