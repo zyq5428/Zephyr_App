@@ -44,8 +44,9 @@ Get-ChildItem -Path . -Recurse -Include *.overlay,*.dts | Select-String -Pattern
 ### 编译指定开发板
 
 ```
-west build -p always -b stm32f429i_disc1 samples\basic\blinky
+west build -p always -b pandora_stm32l475 samples\basic\blinky
 west build -p auto -b pandora_stm32l475 ..\app
+west build -p always -b pandora_stm32l475 ..\app
 west build -b pandora_stm32l475 -t menuconfig .\app
 west build -b pandora_stm32l475 -t guiconfig .\app
 west build -t clean
