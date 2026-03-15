@@ -32,7 +32,7 @@ target_include_directories(app PRIVATE
 
 # 添加所有源文件到应用程序目标
 target_sources(app PRIVATE
-    # src/main.c
+    src/main.c
     src/led_thread.c
     # src/switch_thread.c
     src/ap3216c_thread.c

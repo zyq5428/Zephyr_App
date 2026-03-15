@@ -19,10 +19,6 @@
 
 LOG_MODULE_REGISTER(Display_TASK, LOG_LEVEL_INF);
 
-/* -------------------------------------------------------------------------- */
-/* 硬件抽象层 (HAL) - 背光控制                              */
-/* -------------------------------------------------------------------------- */
-
 static const struct device *dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 
 /* --- 按键硬件定义 --- */
@@ -33,6 +29,10 @@ static const struct gpio_dt_spec btn_right = GPIO_DT_SPEC_GET(DT_ALIAS(sw_right)
 
 /* 全局输入组句柄 */
 static lv_group_t * input_group;
+
+/* -------------------------------------------------------------------------- */
+/* 硬件抽象层 (HAL) - 背光控制                              */
+/* -------------------------------------------------------------------------- */
 
 #define HAS_PWM_BL  DT_NODE_HAS_STATUS(DT_ALIAS(pwm_backlight), okay)
 #define HAS_GPIO_BL DT_NODE_HAS_STATUS(DT_ALIAS(gpio_backlight), okay)
@@ -524,7 +524,7 @@ void input_init(void)
     lv_indev_set_group(indev, input_group);
 }
 
-void display_thread_entry(void) 
+void display_thread_entry(void *p1, void *p2, void *p3)
 {
     LOG_INF("Display Thread started");
     
@@ -537,7 +537,8 @@ void display_thread_entry(void)
     k_msleep(120);
 
     backlight_init();
-    backlight_set(100); // 开机先亮起来
+    // 开机先亮起来
+    backlight_set(100); 
 
     /* --- 初始化输入设备 --- */
     input_init();
@@ -552,9 +553,25 @@ void display_thread_entry(void)
     }
 }
 
+// 线程栈和定义
+
 #define DISPLAY_STACK_SIZE 8192
 #define DISPLAY_PRIORITY 10
 
 K_THREAD_DEFINE(display_thread_tid, DISPLAY_STACK_SIZE, 
                 display_thread_entry, NULL, NULL, NULL,
                 DISPLAY_PRIORITY, 0, 0);
+
+/* --- 提供一个函数接口来启动显示线程 --- */
+void start_display_thread(void) 
+{
+    // k_thread_create(&display_thread_data, 
+    //                 display_sram1_stack,
+    //                 K_THREAD_STACK_SIZEOF(display_sram1_stack),
+    //                 display_thread_entry, 
+    //                 NULL, NULL, NULL,
+    //                 DISPLAY_PRIORITY, 0, K_NO_WAIT);
+    
+    // 由于我们使用了 K_THREAD_DEFINE，线程会在系统启动时自动创建并运行，所以这里其实不需要再调用 k_thread_create。
+    return;
+}

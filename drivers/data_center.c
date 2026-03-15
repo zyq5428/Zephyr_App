@@ -1,11 +1,23 @@
 #include <zephyr/init.h>
+#include <string.h>
 #include "data_center.h"
 
 // 实例化全局变量
-system_data_t g_sys_data;
+/* ：
+ * 1. 确保 4 字节对齐（ARM 访问速度最快）
+ * 2. 初始化为 {0}，防止结构体里出现随机的“垃圾数据”
+ */
+// __attribute__((section("SRAM1"))) 
+// __attribute__((aligned(4)))
+system_data_t g_sys_data = {0};
 
 void data_center_init(void) {
     k_mutex_init(&g_sys_data.lock);
+    // 注意：手动分配到特殊段的变量，有时不会被系统自动清零，
+    // 所以初始化时最好显式清空。
+    k_mutex_lock(&g_sys_data.lock, K_FOREVER);
+    memset(&g_sys_data, 0, sizeof(system_data_t));
+    k_mutex_unlock(&g_sys_data.lock);
 }
 
 // 传感器调用：更新温湿度
