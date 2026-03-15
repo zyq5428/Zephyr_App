@@ -32,13 +32,15 @@ target_include_directories(app PRIVATE
 
 # 添加所有源文件到应用程序目标
 target_sources(app PRIVATE
-    src/main.c
+    # src/main.c
     src/led_thread.c
     # src/switch_thread.c
     src/ap3216c_thread.c
     src/aht10_thread.c
     src/icm20608_thread.c
     src/display_thread.c
+    # src/norflash_thread.c
+    src/fs_thread.c
     drivers/ap3216c_drv.c
     drivers/aht10_drv.c
     drivers/icm20608_drv.c
