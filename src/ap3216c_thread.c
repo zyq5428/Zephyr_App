@@ -9,6 +9,7 @@
 #include <zephyr/logging/log.h>
 #include <errno.h> // 引入标准错误码
 #include "ap3216c_thread.h"
+#include "data_center.h"
 
 // 启用日志记录
 LOG_MODULE_REGISTER(AP3216C_TASK, LOG_LEVEL_INF);
@@ -89,10 +90,11 @@ void ap3216c_thread_entry(void *p1, void *p2, void *p3)
         ret = ap3216c_read_als_raw(&ap3216c_i2c_spec, &als_value);
 
         if (ret == 0) {
-            // g_als_raw_value = als_value;
+            LOG_DBG("ALS Data: %u raw", als_value);
             // K_NO_WAIT 表示如果队列满了，不等待直接跳过
             k_msgq_put(&als_msgq, &als_value, K_NO_WAIT);
-            LOG_DBG("ALS Data: %u raw", als_value);
+            // 同时更新数据中心的全局状态
+            data_center_update_lux(als_value);
         } else {
             LOG_WRN("Failed to read ALS data: %d", ret);
         }

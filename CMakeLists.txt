@@ -41,6 +41,8 @@ target_sources(app PRIVATE
     src/display_thread.c
     # src/norflash_thread.c
     src/fs_thread.c
+    src/storage_thread.c
+    drivers/data_center.c
     drivers/ap3216c_drv.c
     drivers/aht10_drv.c
     drivers/icm20608_drv.c

@@ -7,6 +7,7 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 #include "icm20608.h"
+#include "data_center.h"
 
 LOG_MODULE_REGISTER(ICM_TASK, LOG_LEVEL_INF);
 
@@ -70,13 +71,15 @@ void icm20608_thread_entry(void *p1, void *p2, void *p3)
         // 读取并打印
         ret = icm20608_read_data(&dev_i2c, &sensor_data);
         if (ret == 0) {
-            // LOG_DBG("ACC: X=%.2f Y=%.2f Z=%.2f | GYRO: X=%.2f Y=%.2f Z=%.2f | Temp: %.2f",
-            //             (double)sensor_data.accel_x, (double)sensor_data.accel_y, (double)sensor_data.accel_z,
-            //             (double)sensor_data.gyro_x, (double)sensor_data.gyro_y, (double)sensor_data.gyro_z,
-            //             (double)sensor_data.temp);
+            LOG_DBG("ACC: X=%.2f Y=%.2f Z=%.2f | GYRO: X=%.2f Y=%.2f Z=%.2f | Temp: %.2f",
+                        (double)sensor_data.accel_x, (double)sensor_data.accel_y, (double)sensor_data.accel_z,
+                        (double)sensor_data.gyro_x, (double)sensor_data.gyro_y, (double)sensor_data.gyro_z,
+                        (double)sensor_data.temp);
 
             // 将数据放入消息队列供其他模块使用
             k_msgq_put(&imu_msgq, &sensor_data, K_NO_WAIT);
+            // 同时更新数据中心的全局状态
+            data_center_update_imu(&sensor_data);
         }
 
         // 轮询模式下必须有延时，防止串口刷屏；中断模式下该延时可极大减小或注释掉

@@ -7,6 +7,7 @@
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/logging/log.h>
 #include "aht10.h"
+#include "data_center.h"
 
 // 注册日志模块
 LOG_MODULE_REGISTER(AHT10_TASK, LOG_LEVEL_INF);
@@ -58,6 +59,8 @@ void aht10_thread_entry(void *p1, void *p2, void *p3)
             // 将数据放入消息队列供其他模块使用
             // K_NO_WAIT: 如果队列满了，丢弃旧数据或直接跳过，不阻塞线程
             k_msgq_put(&aht10_msgq, &sensor_data, K_NO_WAIT);
+            // 同时更新数据中心的全局状态
+            data_center_update_env(&sensor_data);
         } else {
             LOG_WRN("Failed to read AHT10: %d", ret);
             

@@ -394,19 +394,19 @@ dmauart: &usart1 {
         #address-cells = <1>;
         #size-cells = <1>;
 
-		/* 对应你图片里的RTOS系统区 */
+		/* RTOS系统区: 2MB */
         rtos_partition: partition@0 {
             label = "rtos";
-            reg = <0x00000000 0x00200000>;
+            reg = <0x00000000 DT_SIZE_M(2)>;
         };
 
-        /* 对应你图片里的中文字库区 */
+        /* 中文字库区: 约 6MB */
         font_partition: partition@200000 {
             label = "chinese-font";
             reg = <0x00200000 0x00603000>;
         };
 
-        /* 对应你图片里的用户使用区 */
+        /* 用户使用区: 约 1MB */
         storage_partition: partition@803000 {
             label = "storage";
             reg = <0x00803000 0x000FD000>;
@@ -415,7 +415,7 @@ dmauart: &usart1 {
 		/* 对应你图片里的文件系统区 */
         filesystem_partition: partition@900000 {
             label = "filesystem";
-            reg = <0x00900000 0x00700000>;
+            reg = <0x00900000 DT_SIZE_M(7)>;
         };
     };
 };
